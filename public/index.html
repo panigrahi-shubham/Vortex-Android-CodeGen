@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TPHub Recorder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --panel2:#1d212a; --line:#2a2f3a; --txt:#e6e8ee; --mut:#8b93a7; --acc:#4f8cff; --good:#3ecf8e; --warn:#f5b84b; --bad:#ff6b6b; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--txt); font: 13px/1.45 system-ui, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; }
+  .badge { padding: 2px 8px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); color: var(--mut); font-size: 12px; }
+  .badge.good { color: var(--good); } .badge.warn { color: var(--warn); } .badge.bad { color: var(--bad); }
+  button, input, select { font: inherit; color: var(--txt); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+  button { cursor: pointer; } button:hover { border-color: var(--acc); } button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
+  input[type=text] { width: 220px; }
+  main { display: grid; grid-template-columns: auto minmax(300px, 1fr) minmax(320px, 1.2fr); gap: 12px; padding: 12px; height: calc(100% - 52px); }
+  .col { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  #toolbar { display: flex; gap: 4px; flex-wrap: wrap; }
+  #toolbar button.on { background: var(--acc); border-color: var(--acc); color: #fff; }
+  #phone { position: relative; display: block; width: fit-content; align-self: flex-start; line-height: 0; border: 2px solid var(--line); border-radius: 10px; overflow: hidden; background: #000; }
+  #shot { display: block; user-select: none; -webkit-user-drag: none; }
+  #ov { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
+  .box { position: absolute; pointer-events: none; border: 2px solid var(--acc); background: rgba(79,140,255,.18); }
+  .box.sel { border-color: var(--good); background: rgba(62,207,142,.2); }
+  .box.dim { border: 1px solid rgba(255,255,255,.12); background: transparent; }
+  #info { min-height: 62px; font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
+  #steps { overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .step { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .step .hd { display: flex; align-items: center; gap: 8px; }
+  .step .hd b { flex: 1; }
+  .step .x { padding: 0 7px; }
+  .expr { font-family: Consolas, monospace; font-size: 12px; color: var(--mut); margin: 4px 0; word-break: break-all; }
+  .warn { color: var(--warn); font-size: 12px; }
+  .sugg { margin-top: 4px; border-top: 1px dashed var(--line); padding-top: 4px; font-size: 12px; }
+  .sugg label, .pre label { display: block; color: var(--txt); }
+  .sugg small { color: var(--mut); }
+  #code { flex: 1; width: 100%; min-height: 200px; resize: none; font-family: Consolas, monospace; font-size: 12px; background: #0b0d11; color: #cfe3ff; border: 1px solid var(--line); border-radius: 8px; padding: 10px; white-space: pre; }
+  #menu { position: fixed; z-index: 10; background: var(--panel); border: 1px solid var(--acc); border-radius: 8px; padding: 6px; display: none; flex-direction: column; gap: 4px; min-width: 190px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  #menu button { text-align: left; }
+  #toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px; display: none; z-index: 20; max-width: 80vw; }
+  #toast.err { border-color: var(--bad); color: var(--bad); }
+  #busy { color: var(--warn); }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  h3 { margin: 0; font-size: 12px; color: var(--mut); text-transform: uppercase; letter-spacing: .05em; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; height: auto; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>TPHub Recorder</h1>
+  <span id="srcBadge" class="badge">not connected</span>
+  <span id="devBadge" class="badge"></span>
+  <span id="wvBadge" class="badge warn" style="display:none" title="Web page content is only as detailed as the app exposes it"></span>
+  <label>Package <input id="pkg" type="text" value=""></label>
+  <button id="btnRefresh">Refresh screen</button>
+  <span id="busy"></span>
+</header>
+
+<main>
+  <div class="col">
+    <div id="toolbar" class="panel"></div>
+    <label class="row" title="How tap steps are written in the test">Tap style
+      <select id="tapStyle">
+        <option value="both">Name, with coordinate fallback</option>
+        <option value="name">Name only</option>
+        <option value="coord">Coordinate only</option>
+      </select>
+    </label>
+    <div id="phone"><img id="shot" alt="phone screen"><div id="ov"></div></div>
+  </div>
+
+  <div class="col">
+    <div id="info" class="panel">Hover an element to see the locator the recorder would use.</div>
+    <div class="row">
+      <button id="btnBack">Back</button>
+      <button id="btnHome">Home</button>
+      <button id="btnEnter">Enter</button>
+      <button id="btnSleep">Wait 1.5 s</button>
+      <button id="btnUndo">Undo last step</button>
+      <button id="btnClear">Clear</button>
+      <button id="btnDebug" title="Saves the full tree and screenshot of the current screen so problems can be diagnosed">Save debug snapshot</button>
+    </div>
+    <h3>Steps</h3>
+    <div id="steps"></div>
+  </div>
+
+  <div class="col">
+    <div class="row">
+      <label>Test name <input id="tname" type="text" value="recorded flow"></label>
+      <button id="btnCopy">Copy</button>
+      <button id="btnSave" class="primary">Save .spec.ts</button>
+    </div>
+    <textarea id="code" readonly spellcheck="false"></textarea>
+  </div>
+</main>
+
+<div id="menu"></div>
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const MODES = [
+  ['tap', 'Tap'], ['longpress', 'Long-press'], ['doubletap', 'Double-tap'], ['swipe', 'Swipe'],
+  ['type', 'Type'], ['scroll', 'Scroll to'], ['assert', 'Assert'], ['wait', 'Wait for'], ['inspect', 'Inspect'],
+];
+let S = null;              // latest screen payload
+let steps = [];            // recorded steps
+let assets = [];           // cropped template images for coordinate taps
+let mode = 'tap';
+let busy = false;
+let drag = null;
+
+// ---------- helpers ----------
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function toast(msg, err) {
+  const t = $('#toast');
+  t.textContent = msg; t.className = err ? 'err' : ''; t.style.display = 'block';
+  clearTimeout(toast.t); toast.t = setTimeout(() => (t.style.display = 'none'), err ? 7000 : 2500);
+}
+function setBusy(b, msg) {
+  busy = b; $('#busy').textContent = b ? (msg || 'Working...') : '';
+  document.querySelectorAll('button').forEach((x) => (x.disabled = b));
+}
+const tail = (id) => (id || '').split('/').pop();
+const titleOf = (n) => n.text || n.label || tail(n.identifier) || n.type.split('.').pop();
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ---------- toolbar ----------
+function buildToolbar() {
+  $('#toolbar').innerHTML = MODES.map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}">${l}</button>`).join('');
+}
+$('#toolbar').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b) return;
+  mode = b.dataset.mode; buildToolbar();
+  const hint = {
+    tap: 'Click an element to tap it. Drag to swipe.', longpress: 'Click an element to long-press it.', doubletap: 'Click an element to double-tap it.',
+    swipe: 'Drag on the screen to swipe.', type: 'Click an input field, then enter the text.', scroll: 'Click the element you want to scroll to.',
+    assert: 'Click an element, then choose the check to add.', wait: 'Click an element, then choose what to wait for.', inspect: 'Click an element to see all its locators.',
+  }[mode];
+  toast(hint);
+});
+
+// ---------- screen ----------
+async function refresh() {
+  setBusy(true, 'Reading the screen...');
+  try { S = await api('/api/screen'); render(); } catch (e) { toast(e.message, true); } finally { setBusy(false); }
+}
+function render() {
+  const img = $('#shot');
+  const h = Math.max(420, Math.min(window.innerHeight - 150, 860));
+  img.style.height = h + 'px'; img.style.width = Math.round((h * S.width) / S.height) + 'px';
+  img.src = S.img;
+  $('#srcBadge').textContent = 'tree: ' + S.source;
+  $('#srcBadge').className = 'badge ' + (S.source === 'uiautomator' ? 'warn' : 'good');
+  $('#devBadge').textContent = S.device;
+  const wv = S.nodes.filter((n) => /WebView/.test(n.type)).length;
+  $('#wvBadge').textContent = wv ? 'WebView on screen (' + wv + ')' : '';
+  $('#wvBadge').style.display = wv ? '' : 'none';
+  if (S.pkgChangedFrom) toast('Package changed from ' + S.pkgChangedFrom + ' to ' + S.pkg + ' (the app that is on screen).');
+  if (document.activeElement !== $('#pkg')) $('#pkg').value = S.pkg;
+  if (!S.appVisible) toast('The app "' + S.pkg + '" is not on screen. Open it on the phone, or fix the Package field, then Refresh.', true);
+  drawBoxes(null, null);
+}
+function scale() { const r = $('#shot').getBoundingClientRect(); return { sx: r.width / S.width, sy: r.height / S.height, r }; }
+function drawBoxes(hover, sel) {
+  if (!S) return;
+  const { sx, sy } = scale();
+  const mk = (n, cls) => `<div class="box ${cls}" style="left:${n.rect.x * sx}px;top:${n.rect.y * sy}px;width:${n.rect.w * sx}px;height:${n.rect.h * sy}px"></div>`;
+  let html = '';
+  if (sel) html += mk(sel, 'sel');
+  if (hover) html += mk(hover, '');
+  $('#ov').innerHTML = html;
+}
+function toDevice(ev) {
+  const { r } = scale();
+  return { x: Math.round(((ev.clientX - r.left) * S.width) / r.width), y: Math.round(((ev.clientY - r.top) * S.height) / r.height) };
+}
+function hit(x, y) {
+  // Topmost element under the point: later siblings are drawn over earlier ones, so search children last-to-first.
+  if (!S._kids) {
+    S._kids = new Map();
+    for (const n of S.nodes) { if (!S._kids.has(n.parentId)) S._kids.set(n.parentId, []); S._kids.get(n.parentId).push(n); }
+  }
+  const inside = (n) => n.rect.w > 0 && n.rect.h > 0 && x >= n.rect.x && x < n.rect.x + n.rect.w && y >= n.rect.y && y < n.rect.y + n.rect.h;
+  const down = (list) => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const n = list[i];
+      if (inside(n)) return down(S._kids.get(n.id) || []) || n;
+    }
+    return null;
+  };
+  return down(S._kids.get(null) || []);
+}
+function showInfo(n) {
+  if (!n) { $('#info').textContent = 'No element here.'; return; }
+  const t = n.target;
+  const col = t.quality >= 85 ? 'good' : t.quality >= 55 ? 'warn' : 'bad';
+  $('#info').innerHTML =
+    `<span class="badge ${col}">${t.kind} ${t.quality}</span> <b>${esc(titleOf(n))}</b> <small style="color:var(--mut)">${esc(n.type.split('.').pop())}</small><br>` +
+    `<span>${t.expr ? esc(t.expr) : '(no locator: coordinate tap)'}</span>` +
+    (t.viaAncestor ? '<br><span class="warn">locator is on a parent element</span>' : '') +
+    (t.warnings || []).map((w) => `<br><span class="warn">${esc(w)}</span>`).join('');
+}
+
+// ---------- pointer handling ----------
+const ov = $('#ov');
+ov.addEventListener('pointermove', (e) => {
+  if (!S || busy) return;
+  const p = toDevice(e); const n = hit(p.x, p.y);
+  drawBoxes(n, null); showInfo(n);
+});
+ov.addEventListener('pointerleave', () => drawBoxes(null, null));
+ov.addEventListener('pointerdown', (e) => { if (!S || busy) return; drag = { start: toDevice(e), t: Date.now() }; ov.setPointerCapture(e.pointerId); });
+ov.addEventListener('pointerup', (e) => {
+  if (!S || busy || !drag) return;
+  const d = drag; drag = null;
+  const end = toDevice(e);
+  const dist = Math.hypot(end.x - d.start.x, end.y - d.start.y);
+  if (dist > 40) {
+    if (mode === 'swipe' || ['tap', 'longpress', 'doubletap'].includes(mode)) return doSwipe(d.start, end, Date.now() - d.t);
+    return toast('Switch to Swipe or Tap mode to swipe.');
+  }
+  if (mode === 'swipe') return toast('Drag on the screen to swipe.');
+  onClick(d.start, e);
+});
+
+async function doSwipe(a, b, ms) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dir = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? 'up' : 'down') : (dx < 0 ? 'left' : 'right');
+  const distance = Math.round(Math.hypot(dx, dy));
+  await perform({ kind: 'swipe', x: a.x, y: a.y, x2: b.x, y2: b.y, duration: Math.max(200, Math.min(ms, 1200)) },
+    { type: 'swipe', title: 'swipe ' + dir, args: { direction: dir, distance } });
+}
+
+async function cropAsset(p) {
+  // Saves a 200x200 picture of the area around an unlabeled element, for later template matching.
+  try {
+    const img = $('#shot');
+    const c = document.createElement('canvas'); c.width = 200; c.height = 200;
+    const k = img.naturalWidth / S.width;
+    c.getContext('2d').drawImage(img, Math.max(0, (p.x - 100) * k), Math.max(0, (p.y - 100) * k), 200 * k, 200 * k, 0, 0, 200, 200);
+    const name = 'step-' + (steps.length + 1) + '.png';
+    assets.push({ name, dataUrl: c.toDataURL('image/png') });
+    return name;
+  } catch (e) { return undefined; }
+}
+
+function center(n) { return { x: Math.round(n.rect.x + n.rect.w / 2), y: Math.round(n.rect.y + n.rect.h / 2) }; }
+function findInput(n) {
+  let cur = n;
+  while (cur) { if (/EditText|TextField/i.test(cur.type)) return cur; cur = cur.parentId === null ? null : S.nodes[cur.parentId]; }
+  return null;
+}
+
+async function onClick(pt, ev) {
+  const n = hit(pt.x, pt.y);
+  if (!n) return toast('No element at that point.');
+  if (mode === 'inspect') {
+    drawBoxes(null, n); showInfo(n);
+    $('#info').innerHTML += '<br><b>All locators:</b><br>' + (n.options.length ? n.options.map((o) => `${esc(o.expr)} <small>(${o.note})</small>`).join('<br>') : 'none');
+    return;
+  }
+  if (['tap', 'longpress', 'doubletap'].includes(mode)) {
+    const t = n.target;
+    const step = { type: mode, title: titleOf(n), target: t, x: pt.x, y: pt.y, pre: true, mode: $('#tapStyle').value };
+    if (t.kind === 'coordinate') step.asset = await cropAsset(pt);
+    return perform({ kind: mode, x: pt.x, y: pt.y }, step);
+  }
+  if (mode === 'type') {
+    const input = findInput(n);
+    const text = window.prompt('Text to type' + (input ? ' into "' + titleOf(input) + '"' : ' at the clicked position'));
+    if (text === null) return;
+    // Tap the real field when it is in the tree; otherwise tap exactly where you clicked (not the middle of some parent box).
+    const c = input ? center(input) : pt;
+    const noLocator = { kind: 'coordinate', expr: null, quality: 10, warnings: ['no input element found here: the clicked position is used'] };
+    const step = { type: 'type', title: titleOf(input || n), target: input ? input.target : noLocator, args: { text }, x: c.x, y: c.y, pre: true };
+    if (!input || step.target.kind === 'coordinate') step.asset = await cropAsset(c);
+    return perform({ kind: 'text', x: c.x, y: c.y, text }, step);
+  }
+  if (mode === 'scroll') {
+    return perform({ kind: 'scroll' }, { type: 'scroll_to', title: titleOf(n), target: n.target });
+  }
+  if (mode === 'assert' || mode === 'wait') return showMenu(n, ev);
+}
+
+// ---------- assertion / wait menu ----------
+function showMenu(n, ev) {
+  const items = [];
+  const t = n.target;
+  if (t.kind === 'coordinate') return toast('This element has no locator, so it cannot be asserted. Pick a labelled element.', true);
+  if (mode === 'wait') {
+    items.push(['Wait until visible', () => addStep({ type: 'wait_visible', title: titleOf(n), target: t })]);
+    items.push(['Wait until it disappears', () => addStep({ type: 'wait_hidden', title: titleOf(n), target: t })]);
+  } else {
+    const A = (label, assertion, expected) => items.push([label, () => addStep({ type: 'assert', title: titleOf(n), target: t, args: { assertion, expected } })]);
+    A('is visible', 'visible');
+    A('is hidden', 'hidden');
+    A('is enabled', 'enabled');
+    A('is disabled', 'disabled');
+    const cur = n.text || n.label;
+    if (cur) A('text equals "' + cur.slice(0, 28) + '"', 'text', cur);
+    items.push(['text contains...', () => { const v = prompt('Text should contain'); if (v) addStep({ type: 'assert', title: titleOf(n), target: t, args: { assertion: 'contains', expected: v } }); }]);
+    if (n.checked !== null) { A('is checked', 'checked'); A('is unchecked', 'unchecked'); }
+    if (n.identifier) { const c = S.nodes.filter((x) => x.identifier === n.identifier).length; items.push(['count equals ' + c + ' (all with this id)', () => addStep({ type: 'assert', title: titleOf(n), target: { ...t, expr: 'screen.getByTestId(' + (t.expr.match(/getByTestId\((.*?)\)/)?.[1] ?? "''") + ')' }, args: { assertion: 'count', expected: c } })]); }
+  }
+  const m = $('#menu');
+  m.innerHTML = '<b>' + esc(titleOf(n)) + '</b>' + items.map((it, i) => `<button data-i="${i}">${esc(it[0])}</button>`).join('') + '<button data-i="x">Cancel</button>';
+  m.style.display = 'flex';
+  m.style.left = Math.min(ev.clientX + 8, window.innerWidth - 230) + 'px';
+  m.style.top = Math.min(ev.clientY + 8, window.innerHeight - 40 - items.length * 32) + 'px';
+  m._items = items;
+}
+$('#menu').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const m = $('#menu'); m.style.display = 'none';
+  if (b.dataset.i !== 'x') m._items[+b.dataset.i][1]();
+});
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#menu')) $('#menu').style.display = 'none'; }, true);
+
+// ---------- steps ----------
+function addStep(st) { steps.push(st); renderSteps(); regenerate(); }
+
+async function perform(body, step) {
+  setBusy(true, 'Running on the phone and waiting for the screen to settle...');
+  try {
+    const res = await api('/api/action', body);
+    step.settleMs = res.settleMs;
+    step.sugg = (res.suggestions || []).map((s, i) => ({ ...s, on: i === 0 }));
+    S = res.screen; steps.push(step);
+    render(); renderSteps(); regenerate();
+  } catch (e) { toast(e.message, true); } finally { setBusy(false); }
+}
+
+function stepSummary(st) {
+  const t = st.title ? ' "' + st.title + '"' : '';
+  return ({ tap: 'Tap', longpress: 'Long-press', doubletap: 'Double-tap', scroll_to: 'Scroll to', type: 'Type into', wait_visible: 'Wait for', wait_hidden: 'Wait until gone:', assert: 'Check' }[st.type] || '') + t ||
+    st.type;
+}
+function renderSteps() {
+  $('#steps').innerHTML = steps.map((st, i) => {
+    const T = st.target;
+    const kind = T ? `<span class="badge ${T.quality >= 85 ? 'good' : T.quality >= 55 ? 'warn' : 'bad'}">${T.kind}</span>` : '';
+    let hd = st.type === 'swipe' ? 'Swipe ' + st.args.direction + ' (' + st.args.distance + ' px)' : st.type === 'press' ? 'Press ' + st.args.key : st.type === 'sleep' ? 'Wait ' + st.args.ms + ' ms' : stepSummary(st);
+    if (st.type === 'assert') hd = 'Check "' + (st.title || '') + '": ' + st.args.assertion + (st.args.expected !== undefined ? ' ' + st.args.expected : '');
+    const isTap = st.type === 'tap' && T && T.kind !== 'coordinate';
+    const pre = (['tap', 'longpress', 'doubletap', 'type'].includes(st.type) && T && T.kind !== 'coordinate' && (!isTap || (st.mode || 'both') === 'name'))
+      ? `<div class="pre"><label><input type="checkbox" data-pre="${i}" ${st.pre !== false ? 'checked' : ''}> check it is visible first (pre-assertion)</label></div>` : '';
+    const style = isTap
+      ? `<div class="pre"><label>Tap style <select data-style="${i}">` +
+        [['both', 'Name, with coordinate fallback'], ['name', 'Name only'], ['coord', 'Coordinate only']].map(([v, l]) => `<option value="${v}" ${(st.mode || 'both') === v ? 'selected' : ''}>${l}</option>`).join('') +
+        '</select></label></div>' : '';
+    const sugg = (st.sugg || []).length
+      ? '<div class="sugg"><small>Suggested checks after this step:</small>' + st.sugg.map((s, j) =>
+          `<label><input type="checkbox" data-sg="${i}:${j}" ${s.on ? 'checked' : ''}> ${esc(s.assertion)} <b>${esc(s.title)}</b> <small>(${esc(s.reason)})</small></label>`).join('') + '</div>' : '';
+    const warn = T && T.warnings && T.warnings.length ? `<div class="warn">${esc(T.warnings[0])}</div>` : '';
+    const slow = st.settleMs > 2500 ? `<div class="warn">screen took ${(st.settleMs / 1000).toFixed(1)} s to settle</div>` : '';
+    return `<div class="step"><div class="hd"><span class="badge">${i + 1}</span><b>${esc(hd)}</b>${kind}<button class="x" data-del="${i}">x</button></div>` +
+      (T && T.expr ? `<div class="expr">${esc(T.expr)}</div>` : '') + warn + slow + style + pre + sugg + '</div>';
+  }).join('') || '<div class="panel">No steps yet. Click on the phone screen to record your first action.</div>';
+}
+$('#steps').addEventListener('click', (e) => {
+  const d = e.target.closest('[data-del]');
+  if (d) { steps.splice(+d.dataset.del, 1); renderSteps(); regenerate(); }
+});
+$('#steps').addEventListener('change', (e) => {
+  const p = e.target.dataset.pre, g = e.target.dataset.sg, st = e.target.dataset.style;
+  if (st !== undefined) { steps[+st].mode = e.target.value; renderSteps(); }
+  if (p !== undefined) steps[+p].pre = e.target.checked;
+  if (g !== undefined) { const [i, j] = g.split(':').map(Number); steps[i].sugg[j].on = e.target.checked; }
+  regenerate();
+});
+
+let regenTimer;
+function regenerate() {
+  clearTimeout(regenTimer);
+  regenTimer = setTimeout(async () => {
+    const payload = steps.map((s) => ({ ...s, post: (s.sugg || []).filter((x) => x.on) }));
+    try { const r = await api('/api/generate', { steps: payload, name: $('#tname').value, pkg: $('#pkg').value || (S && S.pkg) }); $('#code').value = r.code; } catch (e) { toast(e.message, true); }
+  }, 80);
+}
+
+// ---------- buttons ----------
+$('#btnRefresh').onclick = refresh;
+$('#btnBack').onclick = () => perform({ kind: 'key', key: 'BACK' }, { type: 'press', title: 'Back', args: { key: 'BACK' } });
+$('#btnHome').onclick = () => perform({ kind: 'key', key: 'HOME' }, { type: 'press', title: 'Home', args: { key: 'HOME' } });
+$('#btnEnter').onclick = () => perform({ kind: 'key', key: 'ENTER' }, { type: 'press', title: 'Enter', args: { key: 'ENTER' } });
+$('#btnDebug').onclick = async () => { try { const r = await api('/api/debug', {}); toast('Saved: ' + r.file); } catch (e) { toast(e.message, true); } };
+$('#btnSleep').onclick = () => addStep({ type: 'sleep', title: '', args: { ms: 1500 } });
+$('#btnUndo').onclick = () => { steps.pop(); renderSteps(); regenerate(); };
+$('#btnClear').onclick = () => { if (!steps.length || confirm('Remove all recorded steps?')) { steps = []; assets = []; renderSteps(); regenerate(); } };
+$('#btnCopy').onclick = async () => { try { await navigator.clipboard.writeText($('#code').value); toast('Copied.'); } catch { $('#code').select(); toast('Press Ctrl+C to copy.'); } };
+$('#btnSave').onclick = async () => {
+  try {
+    const used = new Set(steps.filter((s) => s.asset).map((s) => s.asset));
+    const r = await api('/api/save', { name: $('#tname').value, code: $('#code').value, assets: assets.filter((a) => used.has(a.name)) });
+    toast('Saved: ' + r.file);
+  } catch (e) { toast(e.message, true); }
+};
+$('#tname').addEventListener('input', regenerate);
+$('#tapStyle').addEventListener('change', () => toast('New tap steps will use this style. Change an existing step in its card.'));
+$('#pkg').addEventListener('change', async () => { await api('/api/config', { pkg: $('#pkg').value }); refresh(); });
+window.addEventListener('resize', () => { if (S) render(); });
+
+// ---------- start ----------
+(async function init() {
+  buildToolbar(); renderSteps(); regenerate();
+  try { const c = await api('/api/config'); $('#pkg').value = c.pkg; if (c.mock) $('#devBadge').textContent = 'mock device'; } catch {}
+  refresh();
+})();
+</script>
+</body>
+</html>

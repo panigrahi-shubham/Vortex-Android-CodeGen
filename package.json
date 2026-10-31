@@ -1,0 +1,14 @@
+{
+  "name": "tphub-recorder",
+  "version": "0.1.0",
+  "description": "Codegen-style Android recorder that generates MobileWright tests (swipe, scroll, waits, pre/post assertions)",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/server.js",
+    "mock": "node src/server.js --mock",
+    "test": "node test/run-tests.js",
+    "check": "node src/check.js"
+  }
+}
