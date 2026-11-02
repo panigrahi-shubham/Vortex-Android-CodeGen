@@ -57,11 +57,13 @@ function descendants(n, ctx) {
   return out;
 }
 
+// `parts` is the serializable description used by the project generators;
+// `expr` stays the MobileWright expression exactly as before.
 function innerWithin(c, inside, ctx) {
   const same = (f, v) => inside.filter((x) => x[f] === v).length;
-  if (c.identifier && same('identifier', c.identifier) === 1) return `getByTestId(${idExpr(c.identifier, ctx.pkg)})`;
-  if (c.label && same('label', c.label) === 1) return `getByLabel(${q(c.label)})`;
-  if (c.text && same('text', c.text) === 1) return `getByText(${q(c.text)})`;
+  if (c.identifier && same('identifier', c.identifier) === 1) return { expr: `getByTestId(${idExpr(c.identifier, ctx.pkg)})`, part: { by: 'id', value: c.identifier } };
+  if (c.label && same('label', c.label) === 1) return { expr: `getByLabel(${q(c.label)})`, part: { by: 'label', value: c.label } };
+  if (c.text && same('text', c.text) === 1) return { expr: `getByText(${q(c.text)})`, part: { by: 'text', value: c.text } };
   return null;
 }
 
@@ -71,10 +73,11 @@ function scopedIn(container, c, ctx) {
   const anchor = inside.find((x) => x.id !== c.id && x.text && !isDynamic(x.text) && ctx.matches(x.text).length === 1);
   if (!anchor) return null;
   const base = `screen.getByTestId(${idExpr(container.identifier, ctx.pkg)}).filter({ has: screen.getByText(${q(anchor.text)}) })`;
-  if (container.id === c.id) return { kind: 'scoped', expr: base, quality: 60, warnings: [] };
+  const parts = { by: 'scoped', container: container.identifier, anchorText: anchor.text, inner: null };
+  if (container.id === c.id) return { kind: 'scoped', expr: base, quality: 60, warnings: [], parts };
   const inner = innerWithin(c, inside, ctx);
   if (!inner) return null;
-  return { kind: 'scoped', expr: `${base}.${inner}`, quality: 60, warnings: [] };
+  return { kind: 'scoped', expr: `${base}.${inner.expr}`, quality: 60, warnings: [], parts: { ...parts, inner: inner.part } };
 }
 
 function scoped(c, ctx) {
@@ -95,7 +98,7 @@ function scoped(c, ctx) {
 function bestFor(c, ctx) {
   const opts = [];
   if (c.identifier && ctx.byId.get(c.identifier).length === 1) {
-    opts.push({ kind: 'testId', expr: `screen.getByTestId(${idExpr(c.identifier, ctx.pkg)})`, quality: 100, warnings: [] });
+    opts.push({ kind: 'testId', expr: `screen.getByTestId(${idExpr(c.identifier, ctx.pkg)})`, quality: 100, warnings: [], parts: { by: 'id', value: c.identifier } });
   }
   if (c.label && ctx.matches(c.label).length === 1) {
     const dyn = isDynamic(c.label);
@@ -104,6 +107,7 @@ function bestFor(c, ctx) {
       expr: `screen.getByLabel(${q(c.label)})`,
       quality: dyn ? 55 : 85,
       warnings: dyn ? ['label looks dynamic (count, time or price): it may change between runs'] : [],
+      parts: { by: 'label', value: c.label },
     });
   }
   if (c.text && ctx.matches(c.text).length === 1) {
@@ -113,6 +117,7 @@ function bestFor(c, ctx) {
       expr: `screen.getByText(${q(c.text)})`,
       quality: dyn ? 50 : 75,
       warnings: dyn ? ['text looks dynamic (count, time or price): it may change between runs'] : [],
+      parts: { by: 'text', value: c.text },
     });
   }
   const top = opts.length ? opts.sort((a, b) => b.quality - a.quality)[0] : null;
@@ -130,6 +135,7 @@ function bestFor(c, ctx) {
       expr: `screen.getByTestId(${idExpr(c.identifier, ctx.pkg)}).nth(${ids.indexOf(c.id)})`,
       quality: 40,
       warnings: [`position-based: ${ids.length} elements share this id`],
+      parts: { by: 'id', value: c.identifier, index: ids.indexOf(c.id) },
     };
   }
   const key = c.label || c.text;
@@ -137,11 +143,15 @@ function bestFor(c, ctx) {
     const m = ctx.matches(key);
     const k = m.indexOf(c.id);
     if (k >= 0) {
+      const field = c.label ? 'label' : 'text';
+      // Keep the exact-match position separately from the legacy substring locator.
+      const exact = ctx.nodes.filter((n) => n[field] === key).map((n) => n.id);
       return {
         kind: 'nth',
         expr: `screen.${c.label ? 'getByLabel' : 'getByText'}(${q(key)}).nth(${k})`,
         quality: 35,
         warnings: ['position-based: this text is not unique'],
+        parts: { by: field, value: key, index: exact.indexOf(c.id) },
       };
     }
   }
@@ -151,6 +161,17 @@ function bestFor(c, ctx) {
 // Best locator for the element the user pointed at. If the element itself has nothing usable
 // (for example an icon inside a labelled button) the search climbs a few levels to a close ancestor.
 export function bestTarget(n, ctx) {
+  // An editor must resolve to the editor itself, never a labelled parent row.
+  // Empty WebView inputs often expose only their Android class.
+  if (/EditText|TextField/i.test(n.type)) {
+    const direct = bestFor(n, ctx);
+    if (direct && direct.parts.by !== 'scoped') return { ...direct, score: direct.quality, nodeId: n.id, viaAncestor: false };
+    const same = ctx.nodes.filter(c => c.type.toLowerCase() === n.type.toLowerCase());
+    const index = same.findIndex(c => c.id === n.id);
+    return { kind: 'nth', expr: `screen.getByType(${q(n.type)}).nth(${index})`, quality: 30, score: 30,
+      warnings: [`Position-based input: ${same.length} fields share this class. Re-record if field order changes.`],
+      parts: { by: 'type', value: n.type, index }, nodeId: n.id, viaAncestor: false };
+  }
   const own = bestFor(n, ctx);
   if (own && own.quality >= 60) return { ...own, score: own.quality, nodeId: n.id, viaAncestor: false };
   const chain = [n];

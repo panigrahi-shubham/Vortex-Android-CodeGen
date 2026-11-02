@@ -1,3 +1,4 @@
+import { runChecks } from './doctor.js';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +9,10 @@ import { annotate } from './locators.js';
 import { suggest } from './suggest.js';
 import { generate } from './codegen.js';
 import { createRealDevice, createMockDevice, makeLock } from './device.js';
+import { checkLocalRequest } from './http-guard.js';
+import { acquireRecorderOwner } from './recorder-owner.js';
+import { randomUUID, createHash } from 'node:crypto';
+import { observeCompletedAction } from './action-result.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -28,21 +33,63 @@ const opts = {
   treeCmd: opt('tree-cmd', 'TREE_CMD', 'mobilecli dump ui'),
   treeSource: opt('tree-source', 'TREE_SOURCE', 'auto'), // auto | mobilecli | uiautomator
   noOpen: flag('no-open'),
+  stateDir: path.resolve(opt('state-dir', 'VORTEX_STATE_DIR', path.join(ROOT, '.vortex'))),
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const log = (...a) => console.log('[tphub]', ...a);
+const log = (...a) => console.log('[vortex]', ...a);
 
 const oneAtATime = makeLock();
+
+// Project, run and device services need Node.js 22.18+ (TypeScript type stripping).
+// On older Node the recorder itself keeps working; only those panels report that they are unavailable.
+let vortex = null;
+let vortexUnavailable = null;
+let ready = false;
+let recorderOwner;
+let stateOwner;
+async function initialize() {
+  try {
+  const { createVortex } = await import('./vortex/index.ts');
+  vortex = await createVortex({ root: ROOT, stateDir: opts.stateDir, mock: opts.mock, log });
+  } catch (e) {
+  vortexUnavailable = `MobileWright services are unavailable: it needs Node.js 22.18 or newer (this is ${process.version}). ${e.message.split('\n')[0]}`;
+  log(vortexUnavailable);
+  }
+}
 let device;
 let state = { nodes: [], size: { width: 1080, height: 2400 } };
+
+function localMobilecli() {
+  for (const start of [opts.outDir, ROOT]) {
+    let dir = start;
+    for (;;) {
+      const entry = path.join(dir, 'node_modules', 'mobilecli', 'index.js');
+      if (fs.existsSync(entry)) return entry;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  return null;
+}
 
 async function getDevice() {
   if (device) return device;
   device = opts.mock
     ? createMockDevice(path.join(ROOT, 'samples'))
-    : await createRealDevice({ serial: opts.serial, treeCmd: opts.treeCmd, treeSource: opts.treeSource, log });
+    : await createRealDevice({ serial: opts.serial, treeCmd: opts.treeCmd, treeSource: opts.treeSource, mobilecli: localMobilecli(), log });
   return device;
+}
+
+async function withRecorder(fn) {
+  return oneAtATime(async () => {
+    const dev = await getDevice();
+    const release = vortex?.leases.acquire(dev.serial, { kind: 'recorder', id: randomUUID(), label: 'Recording' });
+    let result;
+    try { result = await fn(); } finally { release?.(); }
+    return result;
+  });
 }
 
 function pngSize(buf) {
@@ -52,35 +99,57 @@ function pngSize(buf) {
 
 let pkgChangedFrom = null;
 
+const currentSerial = () => (device ? device.serial : opts.mock ? 'mock-device' : opts.serial || null);
+const recorderContext = {
+  outDir: () => opts.outDir,
+  pkg: () => opts.pkg,
+  size: () => state.size || null,
+  serial: currentSerial,
+  activity: () => state.activity || null,
+  nativeTypes: () => [...new Set((state.raw || []).map((n) => n.type))],
+  screenshot: () => state.shot || null,
+};
+
 function annotatedApp(rawNodes) {
   let nodes = appNodes(rawNodes, opts.pkg);
   if (!nodes.length) {
-    // The configured package is not on screen: switch to the app that is, so the user is not left with an empty screen.
+    // Inspect another foreground app without replacing the configured launch target.
     const found = detectPackage(rawNodes);
-    if (found && found !== opts.pkg) {
-      log(`package "${opts.pkg}" not found on screen; switching to "${found}"`);
-      pkgChangedFrom = opts.pkg;
-      opts.pkg = found;
-      nodes = appNodes(rawNodes, opts.pkg);
+    // A test fixture commonly terminates the app during cleanup. Do not mistake
+    // the Android home screen for a newly selected application and overwrite the
+    // configured package; the next run must still launch the selected app.
+    const isLauncher = !!found && /(?:^|\.)(?:launcher|launcher3|nexuslauncher)(?:$|\.)/i.test(found);
+    if (found && found !== opts.pkg && !isLauncher) {
+      log(`package "${opts.pkg}" not found on screen; inspecting "${found}" while keeping the launch target`);
+      // Inspect the foreground screen without changing the user's launch target.
+      // Otherwise opening Settings or a picker makes Launch app launch that app.
+      nodes = appNodes(rawNodes, found);
     }
   }
   annotate(nodes, opts.pkg);
   return nodes;
 }
 
-async function capture() {
+async function capture(settledRaw) {
   const dev = await getDevice();
-  const [shot, raw] = await Promise.all([dev.screenshot(), dev.tree()]);
+  const [shot, raw, activity] = await Promise.allSettled([dev.screenshot(), settledRaw ?? readTree(dev), dev.activity ? dev.activity().catch(() => null) : null]).then((results) => {
+    const failure = results.find((r) => r.status === 'rejected');
+    if (failure) throw failure.reason;
+    return results.map((r) => r.value);
+  });
   const nodes = annotatedApp(raw);
   const size = pngSize(shot) || (await dev.size());
-  state = { nodes, size, raw, shot };
-  return payload(shot, nodes, size, dev);
+  state = { nodes, size, raw, shot, activity, screenId: randomUUID() };
+  return payload(shot, nodes, size, dev, activity);
 }
 
-function payload(shot, nodes, size, dev) {
+const readTree = (dev) => dev.tree();
+
+function payload(shot, nodes, size, dev, activity) {
   const changed = pkgChangedFrom;
   pkgChangedFrom = null;
   return {
+    screenId: state.screenId,
     pkgChangedFrom: changed,
     img: 'data:image/png;base64,' + shot.toString('base64'),
     width: size.width,
@@ -88,6 +157,7 @@ function payload(shot, nodes, size, dev) {
     pkg: opts.pkg,
     source: dev.source,
     device: dev.serial,
+    activity: activity || null,
     appVisible: nodes.length > 0,
     nodes: nodes.map((n) => ({
       id: n.id,
@@ -112,32 +182,47 @@ function payload(shot, nodes, size, dev) {
 async function settle(dev, maxMs = 8000) {
   const t0 = Date.now();
   let prev = null;
+  let raw;
   await sleep(250);
   for (;;) {
-    const nodes = appNodes(await dev.tree(), opts.pkg);
+    raw = await readTree(dev);
+    const nodes = appNodes(raw, opts.pkg);
     const h = hashNodes(nodes);
     if (prev !== null && h === prev) break;
     prev = h;
     if (Date.now() - t0 > maxMs) break;
     await sleep(300);
   }
-  return Date.now() - t0;
+  return { ms: Date.now() - t0, raw };
 }
 
 async function action(body) {
   const dev = await getDevice();
+  if (state.invalid) throw Object.assign(new Error('The last screen capture failed. Refresh before recording another action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
+  if (body.screenId && body.screenId !== state.screenId) throw Object.assign(new Error('The screen changed in another view. Refresh before recording this action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
   const before = state.nodes;
+  const beforeShot = state.shot;
   switch (body.kind) {
+    case 'web': throw Object.assign(new Error('DOM recording is unavailable in this MobileWright recorder. Use exposed text/ID or explicit coordinates.'), { httpStatus: 422 });
     case 'tap': await dev.tap(body.x, body.y); break;
     case 'doubletap': await dev.doubletap(body.x, body.y); break;
     case 'longpress': await dev.longpress(body.x, body.y); break;
     case 'swipe': await dev.swipe(body.x, body.y, body.x2, body.y2, body.duration || 350); break;
-    case 'text':
-      await dev.tap(body.x, body.y);
-      await sleep(350);
+    case 'text': {
+      const input = state.nodes.find((n) => n.id === body.nodeId);
+      if (!input || !/EditText|TextField/i.test(input.type) || !input.target?.parts || input.target.kind === 'coordinate' || input.target.viaAncestor) {
+        throw new Error('Refresh and choose an editable field with a replayable locator before typing.');
+      }
+      await dev.replaceText(input.rect.x + input.rect.w / 2, input.rect.y + input.rect.h / 2);
       await dev.text(body.text);
       break;
+    }
     case 'key': await dev.key(body.key); break;
+    case 'clear': await dev.clearText(body.x, body.y, body.length); break;
+    case 'hide_keyboard': await dev.hideKeyboard(); break;
+    case 'launch_app': await dev.launchApp(opts.pkg); break;
+    case 'close_app': await dev.closeApp(opts.pkg); break;
+    case 'deep_link': await dev.openUrl(body.url, opts.pkg); break;
     case 'scroll': {
       const { width, height } = state.size;
       await dev.swipe(Math.round(width / 2), Math.round(height * 0.7), Math.round(width / 2), Math.round(height * 0.3), 400);
@@ -145,10 +230,16 @@ async function action(body) {
     }
     default: throw new Error('unknown action ' + body.kind);
   }
-  const settleMs = await settle(dev);
-  const screen = await capture();
-  const suggestions = body.kind === 'swipe' || body.kind === 'scroll' ? [] : suggest(before, state.nodes, state.size.height);
-  return { screen, settleMs, suggestions };
+  return observeCompletedAction(async () => {
+    const settled = await settle(dev);
+    const screen = await capture(settled.raw);
+    const raw = ['swipe', 'scroll', 'hide_keyboard', 'checkpoint'].includes(body.kind) ? [] : suggest(before, state.nodes, state.size.height);
+    const suggestions = vortex ? vortex.refineSuggestions(raw) : raw;
+    const screenChange = vortex ? vortex.changeBetween(beforeShot, state.shot) : null;
+    return { screen, settleMs: settled.ms, suggestions, screenChange };
+  }, () => {
+    state = { ...state, nodes: [], raw: [], screenId: randomUUID(), invalid: true };
+  });
 }
 
 // ---- HTTP ---------------------------------------------------------------------
@@ -177,24 +268,51 @@ const json = (res, code, obj) => {
 const safeName = (s) => String(s || 'recorded-flow').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'recorded-flow';
 
 const server = http.createServer(async (req, res) => {
+  if (!ready) return json(res, 503, { error: 'Recorder is starting. Retry shortly.' });
   const url = new URL(req.url, 'http://localhost');
+  const blocked = checkLocalRequest(req, opts.port);
+  if (blocked) {
+    log(blocked);
+    return json(res, 403, { error: blocked });
+  }
   try {
+    if (vortex) {
+      if (await vortex.handle(req, res, url, json, readBody, recorderContext)) return;
+    } else if (/^\/api\/(automation|devices|tests|runs|reports|bench|project|mobilewright|visual)\b/.test(url.pathname)) {
+      return json(res, 501, { error: vortexUnavailable, code: 'UNAVAILABLE' });
+    }
+    // A recorder action must not drive the phone while a test run owns it.
+    if ((url.pathname === '/api/screen' || url.pathname === '/api/action') && vortex) {
+      try {
+        vortex.assertDeviceFree(currentSerial());
+      } catch (e) {
+        return json(res, e.httpStatus || 409, { error: e.message, code: e.code || 'DEVICE_BUSY' });
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': MIME['.html'] });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', 'index.html')));
     }
+    if (req.method === 'GET' && url.pathname === '/api/setup') {
+      const r = await runChecks({ outDir: opts.outDir, mock: opts.mock });
+      return json(res, 200, { ...r, mock: opts.mock });
+    }
     if (req.method === 'GET' && url.pathname === '/api/config') {
-      return json(res, 200, { pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource });
+      return json(res, 200, { pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       const b = await readBody(req);
       if (b.pkg) opts.pkg = String(b.pkg).trim();
       return json(res, 200, { pkg: opts.pkg });
     }
-    if (req.method === 'GET' && url.pathname === '/api/screen') return json(res, 200, await oneAtATime(() => capture()));
+    if (req.method === 'POST' && url.pathname === '/api/record/stop') {
+      await oneAtATime(async () => {});
+      return json(res, 200, { stopped: true });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/screen') return json(res, 200, await withRecorder(() => capture()));
     if (req.method === 'POST' && url.pathname === '/api/action') {
       const body = await readBody(req);
-      return json(res, 200, await oneAtATime(() => action(body)));
+      return json(res, 200, await withRecorder(() => action(body)));
     }
     if (req.method === 'POST' && url.pathname === '/api/generate') {
       const b = await readBody(req);
@@ -226,13 +344,65 @@ const server = http.createServer(async (req, res) => {
     json(res, 404, { error: 'not found' });
   } catch (e) {
     log('error:', e.message);
-    json(res, 500, { error: e.message });
+    json(res, e.httpStatus || 500, { error: e.message, code: e.code });
   }
 });
 
-server.listen(opts.port, '127.0.0.1', () => {
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    log(`recorder is already running at http://127.0.0.1:${opts.port}. Open that existing Vortex window, or stop its recorder process before starting another.`);
+  } else {
+    log(`could not start the recorder on 127.0.0.1:${opts.port}:`, e.message);
+  }
+  // A duplicate process must leave the running recorder and its work alone.
+  process.exit(1);
+});
+
+// Bind the UI port before recovering interrupted runs.
+await new Promise((resolve) => server.listen(opts.port, '127.0.0.1', resolve));
+try {
+  if (!opts.mock) recorderOwner = await acquireRecorderOwner();
+  // Mock instances may coexist, but no two instances may recover the same state.
+  fs.mkdirSync(opts.stateDir, { recursive: true });
+  const stateKey = fs.realpathSync(opts.stateDir);
+  const normalized = process.platform === 'win32' ? stateKey.toLowerCase() : stateKey;
+  const statePort = 20000 + createHash('sha256').update(normalized).digest().readUInt32BE(0) % 20000;
+  stateOwner = await acquireRecorderOwner(statePort);
+} catch (e) {
+  log(e.message);
+  server.close();
+  process.exit(1);
+}
+await initialize();
+ready = true;
+{
   const url = `http://localhost:${opts.port}`;
   log(`recorder running at ${url}  (${opts.mock ? 'MOCK device' : 'real device'}, package ${opts.pkg})`);
   log(`saved specs go to ${opts.outDir}`);
   if (!opts.noOpen && process.platform === 'win32') exec(`start "" ${url}`);
-});
+}
+
+// Stop only work owned by this recorder on exit.
+let shuttingDown = false;
+async function shutdown(sig) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log(`${sig} received, shutting down`);
+  try {
+    const r = vortex && (await vortex.shutdown());
+    if (r) for (const st of r.steps) log('[server]', `${st.ok ? 'ok ' : 'FAIL'} ${st.step}: ${st.detail}`);
+  } catch (e) {
+    log('[server] shutdown error:', e.message);
+  }
+  server.close();
+  recorderOwner?.close();
+  stateOwner?.close();
+  process.exit(0);
+}
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) {
+  try {
+    process.on(sig, () => void shutdown(sig));
+  } catch {
+    /* signal not supported on this platform */
+  }
+}

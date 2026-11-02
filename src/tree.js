@@ -167,7 +167,7 @@ function reindex(list) {
 }
 
 export function hashNodes(nodes) {
-  return nodes.map((n) => `${n.identifier}|${n.text}|${n.label}|${n.rect.x},${n.rect.y},${n.rect.w},${n.rect.h}|${n.selected}|${n.checked}`).join('\n');
+  return nodes.map((n) => `${n.identifier}|${n.text}|${n.label}|${n.rect.x},${n.rect.y},${n.rect.w},${n.rect.h}|${n.selected}|${n.checked}|${n.enabled}`).join('\n');
 }
 
 // Re-nests a flat node list in the same JSON shape `mobilecli dump ui` prints, so a saved snapshot can be read by check.js.

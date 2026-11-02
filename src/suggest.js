@@ -25,7 +25,7 @@ export function suggest(prev, next, screenHeight = 2400) {
     if (!n.identifier || n.target?.kind !== 'testId') continue;
     const p = prevById.get(n.identifier);
     if (!p) continue;
-    const base = { expr: n.target.expr, kind: 'testId', title: titleOf(n), reason: 'changed' };
+    const base = { expr: n.target.expr, parts: n.target.parts, kind: 'testId', title: titleOf(n), reason: 'changed' };
     if (p.checked !== null && n.checked !== null && p.checked !== n.checked) {
       out.push({ ...base, assertion: n.checked ? 'checked' : 'unchecked' });
     } else if (p.selected !== n.selected && (p.selected || n.selected)) {
@@ -57,14 +57,14 @@ export function suggest(prev, next, screenHeight = 2400) {
     if (seen.has(k)) continue;
     seen.add(k);
     appeared++;
-    out.push({ assertion: 'visible', expr: n.target.expr, kind: n.target.kind, title: titleOf(n), reason: 'appeared' });
+    out.push({ assertion: 'visible', expr: n.target.expr, parts: n.target.parts, kind: n.target.kind, title: titleOf(n), reason: 'appeared' });
   }
 
   // 3. things that went away (loaders, dialogs)
   prev
     .filter((n) => !nextKeys.has(key(n)) && n.identifier && GONE.test(tail(n)) && n.target?.kind === 'testId')
     .slice(0, 2)
-    .forEach((n) => out.push({ assertion: 'hidden', expr: n.target.expr, kind: 'testId', title: titleOf(n), reason: 'disappeared' }));
+    .forEach((n) => out.push({ assertion: 'hidden', expr: n.target.expr, parts: n.target.parts, kind: 'testId', title: titleOf(n), reason: 'disappeared' }));
 
   return out.slice(0, 7);
 }

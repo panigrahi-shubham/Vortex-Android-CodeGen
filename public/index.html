@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>TPHub Recorder</title>
+<title>Vortex Android Recorder</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { --bg:#0f1115; --panel:#171a21; --panel2:#1d212a; --line:#2a2f3a; --txt:#e6e8ee; --mut:#8b93a7; --acc:#4f8cff; --good:#3ecf8e; --warn:#f5b84b; --bad:#ff6b6b; }
@@ -12,11 +12,12 @@
   header h1 { font-size: 15px; margin: 0 8px 0 0; }
   .badge { padding: 2px 8px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); color: var(--mut); font-size: 12px; }
   .badge.good { color: var(--good); } .badge.warn { color: var(--warn); } .badge.bad { color: var(--bad); }
+  #srcBadge, #wvBadge { display: none !important; }
   button, input, select { font: inherit; color: var(--txt); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
   button { cursor: pointer; } button:hover { border-color: var(--acc); } button:disabled { opacity: .5; cursor: default; }
   button.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
   input[type=text] { width: 220px; }
-  main { display: grid; grid-template-columns: auto minmax(300px, 1fr) minmax(320px, 1.2fr); gap: 12px; padding: 12px; height: calc(100% - 52px); }
+  main { display: grid; grid-template-columns: minmax(300px, 380px) minmax(300px, 1fr) minmax(270px, 340px); gap: 16px; padding: 16px; height: calc(100% - 52px); }
   .col { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
   #toolbar { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -47,42 +48,151 @@
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   h3 { margin: 0; font-size: 12px; color: var(--mut); text-transform: uppercase; letter-spacing: .05em; }
   @media (max-width: 1100px) { main { grid-template-columns: 1fr; height: auto; } }
+  .hbtn { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mut); display: inline-block; }
+  .dot.good { background: var(--good); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  dialog { background: var(--panel); color: var(--txt); border: 1px solid var(--line); border-radius: 10px; padding: 0; width: min(860px, 94vw); max-height: 88vh; }
+  dialog::backdrop { background: rgba(0,0,0,.55); }
+  .dlg { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow: auto; max-height: 86vh; }
+  .dlg-hd { display: flex; align-items: center; gap: 10px; } .dlg-hd h2 { flex: 1; margin: 0; font-size: 16px; }
+  .mut { color: var(--mut); }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; }
+  .kv dt { color: var(--mut); } .kv dd { margin: 0; word-break: break-word; }
+  .steps-report { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-family: Consolas, monospace; font-size: 12px; }
+  .steps-report .ok { color: var(--good); } .steps-report .no { color: var(--bad); }
+  .note { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--panel2); }
+  .note.err { border-color: var(--bad); } .note.warn { border-color: var(--warn); }
+  pre.log { margin: 0; max-height: 220px; overflow: auto; background: #0b0d11; border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 11.5px; white-space: pre-wrap; word-break: break-all; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px 14px; }
+  .grid2 label { display: flex; flex-direction: column; gap: 3px; color: var(--mut); }
+  .grid2 label.chk { flex-direction: row; align-items: center; gap: 8px; color: var(--txt); }
+  table.devs { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.devs th, table.devs td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.devs th { color: var(--mut); font-weight: 600; }
+  .banner { margin: 8px 12px 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--warn); background: #2a2414; display: none; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .banner.err { border-color: var(--bad); background: #2a1616; }
+  #codeIssues { display: none; border: 1px solid var(--bad); border-radius: 8px; padding: 8px 10px; background: #2a1616; font-size: 12.5px; }
+  #codeIssues li { margin: 2px 0; }
+  .wide { width: min(1240px, 96vw); }
+  .ins-grid { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
+  #iPhone { position: relative; line-height: 0; border: 2px solid var(--line); border-radius: 10px; overflow: hidden; background: #000; width: fit-content; }
+  #iShot { display: block; height: 560px; }
+  #iOv { position: absolute; inset: 0; cursor: crosshair; }
+  table.cands { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.cands td, table.cands th { border-bottom: 1px solid var(--line); padding: 5px 6px; text-align: left; vertical-align: top; }
+  table.cands code { font-family: Consolas, monospace; word-break: break-all; }
+  .st-verified-unique { color: var(--good); } .st-ambiguous, .st-wrong-target { color: var(--warn); } .st-not-found, .st-error { color: var(--bad); } .st-not-verifiable { color: var(--mut); }
+  #iTree { max-height: 220px; overflow: auto; font-family: Consolas, monospace; font-size: 11.5px; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
+  #iTree div { cursor: pointer; padding: 1px 4px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #iTree div:hover, #iTree div.on { background: var(--panel2); }
+  .runrow { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .runrow .f { flex: 1; font-family: Consolas, monospace; font-size: 12px; }
+  .stat { font-weight: 700; } .stat.passed { color: var(--good); } .stat.failed, .stat.error, .stat.timeout { color: var(--bad); } .stat.no-tests, .stat.cancelled { color: var(--warn); } .stat.running, .stat.starting { color: var(--acc); }
+  #fileTabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  #fileTabs button { font-family: Consolas, monospace; font-size: 11.5px; padding: 3px 8px; }
+  #fileTabs button.on { background: var(--acc); border-color: var(--acc); color: #fff; }
+  #fileTabs .grp { color: var(--mut); font-size: 11px; align-self: center; margin-left: 6px; }
+  .pg { font-size: 11.5px; color: var(--mut); display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+  .pg input { width: 150px; padding: 2px 6px; font-size: 12px; }
+  .secret-env { width: 210px; padding: 2px 6px; font-size: 12px; font-family: Consolas, monospace; }
+  .stat.skipped { color: var(--warn); }
+  .case { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: var(--panel2); }
+  .case .hd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .case .hd b { flex: 1; }
+  .entry { display: flex; gap: 8px; align-items: center; font-family: Consolas, monospace; font-size: 12px; padding: 3px 0; flex-wrap: wrap; }
+  .entry .f { flex: 1; min-width: 200px; word-break: break-all; }
+  .mod-hd { display: flex; gap: 8px; align-items: center; margin-top: 10px; } .mod-hd h3 { flex: 1; }
+  .box.web { border-color: #c77dff; background: rgba(199,125,255,.16); }
+  .box.hit { border-color: var(--warn); background: rgba(245,184,75,.18); }
+  #iWebBar, #wSearchBar { gap: 6px; }
+  #iWebBar select, #wSearchBar select { max-width: 260px; }
+  .ctx { font-family: Consolas, monospace; font-size: 12px; padding: 1px 6px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); }
+  .ctx.web { border-color: #c77dff; color: #e0c3ff; }
+  table.evid td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 12.5px; }
+  .ok { color: var(--good); } .no { color: var(--bad); }
+  .rep-grid { display: grid; grid-template-columns: minmax(300px, 0.9fr) 1.4fr; gap: 12px; align-items: start; }
+  #repList { max-height: 62vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  #repList .rr { padding: 7px 10px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12.5px; }
+  #repList .rr:hover, #repList .rr.on { background: var(--panel2); }
+  .diagbox { background: #2a2414; border: 1px solid var(--warn); border-radius: 8px; padding: 6px 10px; margin-top: 4px; font-size: 12.5px; }
+  @media (max-width: 900px) { .rep-grid { grid-template-columns: 1fr; } }
+  .shots img { max-height: 320px; border: 1px solid var(--line); border-radius: 6px; margin: 6px 6px 0 0; }
+a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
+  main { height: calc(100% - 104px); }
+  #guide { display: flex; gap: 8px; padding: 8px 12px 0; flex-wrap: wrap; }
+  .gstep { flex: 1; min-width: 230px; display: flex; gap: 10px; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  .gstep .num { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; background: var(--panel2); border: 1px solid var(--line); flex: none; }
+  .gstep.done .num { background: var(--good); border-color: var(--good); color: #0b1a12; }
+  .gstep.now { border-color: var(--acc); } .gstep.now .num { background: var(--acc); border-color: var(--acc); color: #fff; }
+  .gstep.bad { border-color: var(--bad); } .gstep.bad .num { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .gstep .gt { flex: 1; min-width: 0; } .gstep .gt b { display: block; } .gstep .gt span { color: var(--mut); font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .empty { border: 1px dashed var(--line); border-radius: 10px; padding: 14px 16px; color: var(--mut); line-height: 1.6; }
+  .empty b { color: var(--txt); } .empty ol { margin: 6px 0 6px 18px; padding: 0; }
+  kbd { font: 11px Consolas, monospace; padding: 1px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--panel2); color: var(--txt); }
+  table.chk { width: 100%; border-collapse: collapse; } table.chk td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .st { font-weight: 700; font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
+  .st.ok { color: var(--good); } .st.warn { color: var(--warn); } .st.missing { color: var(--bad); } .st.info { color: var(--mut); }
+  .fix { margin-top: 3px; font-size: 12px; color: var(--mut); } .fix code { background: var(--panel2); padding: 0 4px; border-radius: 4px; color: var(--txt); }
+  #benchFrame { width: 100%; height: 56vh; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .prog { height: 6px; background: var(--panel2); border-radius: 4px; overflow: hidden; } .prog i { display: block; height: 100%; background: var(--acc); width: 0; transition: width .3s; }
 </style>
 </head>
 <body>
 <header>
-  <h1>TPHub Recorder</h1>
+  <h1>Vortex Android Recorder</h1>
   <span id="srcBadge" class="badge">not connected</span>
   <span id="devBadge" class="badge"></span>
   <span id="wvBadge" class="badge warn" style="display:none" title="Web page content is only as detailed as the app exposes it"></span>
   <label>Package <input id="pkg" type="text" value=""></label>
   <button id="btnRefresh">Refresh screen</button>
   <span id="busy"></span>
+  <span style="flex:1"></span>
+  <button id="btnRuns" class="hbtn" title="Saved test cases: reopen and run with MobileWright">Project &amp; runs</button>
+  <button id="btnReports" class="hbtn" title="Execution reports of every run, with HTML and JSON export">Reports</button>
+  <button id="btnTools" class="hbtn" title="Inspect controls, devices, benchmarks, setup check">Tools &#9662;</button>
+  <button id="btnHelp" class="hbtn" title="How to use the recorder, keyboard shortcuts (?)">?</button>
+  <button id="btnInspector" class="hbtn">Inspect controls</button>
+  <button id="btnDevices" class="hbtn" style="display:none">Devices</button>
 </header>
+<nav id="guide" aria-label="Steps">
+  <div class="gstep" id="g1"><span class="num">1</span><div class="gt"><b>Connect</b><span id="g1t">Checking the phone...</span></div><button id="g1b">Setup check</button></div>
+  <div class="gstep" id="g2"><span class="num">2</span><div class="gt"><b>Record</b><span id="g2t">Click on the phone screen to record a tap</span></div><button id="g2b" title="Read the phone screen again (R)">Refresh</button></div>
+  <div class="gstep" id="g3"><span class="num">3</span><div class="gt"><b>Save &amp; run</b><span id="g3t">Name the test, then save it</span></div><button id="g3save" class="primary" title="Save to project (Ctrl+S)">Save</button><button id="g3run" title="Run the saved test now">Run &#9656;</button></div>
+</nav>
+<div id="restoreBanner" class="banner"><span id="restoreText"></span><button id="btnRestore" class="primary">Restore steps</button><button id="btnDiscard">Discard</button></div>
+<div id="discBanner" class="banner err"></div>
 
 <main>
   <div class="col">
     <div id="toolbar" class="panel"></div>
-    <label class="row" title="How tap steps are written in the test">Tap style
+    <details><summary class="mut">Tap options</summary><label class="row" title="How tap steps are written in the test">Tap style
       <select id="tapStyle">
         <option value="both">Name, with coordinate fallback</option>
-        <option value="name">Name only</option>
+        <option value="name" selected>Name only (recommended)</option>
         <option value="coord">Coordinate only</option>
       </select>
-    </label>
+    </label></details>
+    <div id="webGuide" class="note" role="status"><span id="webStatus">Text, ID, accessibility labels, and coordinates from the captured screen.</span></div>
     <div id="phone"><img id="shot" alt="phone screen"><div id="ov"></div></div>
   </div>
 
   <div class="col">
-    <div id="info" class="panel">Hover an element to see the locator the recorder would use.</div>
+    <div id="info" class="panel">Inspect a screen point or search the controls below. Inspection does not tap the device.</div>
+    <details id="inspectPanel" class="panel" open>
+      <summary><b>Inspect controls</b> <span id="inspectCount" class="mut"></span></summary>
+      <label class="row" style="margin-top:8px"><span class="mut">Search</span><input id="inspectSearch" type="search" placeholder="Text, label, ID or class" style="flex:1;min-width:100px"></label>
+      <div id="inspectList" style="max-height:150px;overflow:auto;display:flex;flex-direction:column;gap:4px"></div>
+      <div id="inspectDetail" class="note" style="margin-top:8px">Refresh, then select a control or a point on the phone.</div>
+    </details>
     <div class="row">
-      <button id="btnBack">Back</button>
-      <button id="btnHome">Home</button>
+      <button id="btnBack" title="Phone back button (B)">Back</button>
+      <button id="btnHome" title="Phone home button (H)">Home</button>
       <button id="btnEnter">Enter</button>
+      <button id="btnMore" title="App switch, hide keyboard, launch or close the app, deep link, screen check, screenshot checkpoint">More &#9662;</button>
       <button id="btnSleep">Wait 1.5 s</button>
-      <button id="btnUndo">Undo last step</button>
-      <button id="btnClear">Clear</button>
-      <button id="btnDebug" title="Saves the full tree and screenshot of the current screen so problems can be diagnosed">Save debug snapshot</button>
+      <button id="btnUndo" title="Undo last step (Ctrl+Z)">Undo</button>
+      <button id="btnClear" title="Remove all recorded steps">Clear all</button>
+      <button id="btnDebug" style="display:none">Save debug snapshot</button>
     </div>
     <h3>Steps</h3>
     <div id="steps"></div>
@@ -90,13 +200,135 @@
 
   <div class="col">
     <div class="row">
-      <label>Test name <input id="tname" type="text" value="recorded flow"></label>
-      <button id="btnCopy">Copy</button>
-      <button id="btnSave" class="primary">Save .spec.ts</button>
+      <label>Test name <input id="tname" type="text" value="recorded flow" style="width:170px"></label>
+      <label title="Folder that groups related test cases">Module <input id="tmodule" type="text" value="general" style="width:110px"></label>
     </div>
-    <textarea id="code" readonly spellcheck="false"></textarea>
+    <div class="row">
+      <label>Test output <select id="fw">
+        <option value="mobilewright">MobileWright (TypeScript)</option>
+        <option value="legacy">MobileWright, single .spec.ts (v0.1 format)</option>
+      </select></label>
+      <label id="modeWrap" title="Plain: one standalone test file. POM: page objects, fixtures, data and a short test. Both: both from the same recording.">Mode <select id="mode">
+        <option value="plain">Plain</option>
+        <option value="pom">POM</option>
+        <option value="both">Both</option>
+      </select></label>
+      <label id="targetWrap" style="display:none" title="In Both mode only this variant is picked up by the test runners; the other one is saved under a name they skip.">Runs by default <select id="target">
+        <option value="pom">POM</option>
+        <option value="plain">Plain</option>
+      </select></label>
+    </div>
+    <div class="row">
+      <button id="btnCopy">Copy file</button>
+      <button id="btnSave" class="primary">Save to project</button>
+      <span id="saveWhere" class="mut" style="font-size:12px"></span>
+    </div>
+    <div id="codeIssues"></div>
+    <details id="codePreview"><summary>Generated code</summary><div id="fileTabs"></div>
+    <textarea id="code" readonly spellcheck="false"></textarea></details>
   </div>
 </main>
+
+<dialog id="repDlg" class="wide" aria-labelledby="repTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="repTitle">Execution reports</h2><button id="repRefresh">Refresh</button><button data-close>Close</button></div>
+    <div id="repRecovered"></div>
+    <div class="row">
+      <select id="repFw"><option value="">All frameworks</option><option value="mobilewright">MobileWright</option></select>
+      <select id="repSt"><option value="">All results</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="error">Error</option><option value="interrupted">Interrupted</option><option value="cancelled">Cancelled</option><option value="timeout">Timeout</option><option value="no-tests">No tests</option></select>
+      <input id="repQ" type="text" placeholder="Search test or device" style="width:220px">
+      <span id="repCount" class="mut"></span>
+    </div>
+    <div class="rep-grid"><div id="repList"></div><div id="repDetail" class="note">Select a run.</div></div>
+  </div>
+</dialog>
+
+<dialog id="saveDlg" aria-labelledby="saveTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="saveTitle">Saved</h2><button data-close>Close</button></div>
+    <div id="saveBody"></div>
+  </div>
+</dialog>
+
+<dialog id="runDlg" class="wide" aria-labelledby="runTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="runTitle">Project and runs</h2><button id="rRefresh">Refresh</button><button data-close>Close</button></div>
+    <div id="mwEnv" class="note">Checking MobileWright...</div>
+    <div><div class="mod-hd"><h3>Saved test cases</h3><label class="mut" title="Run a failed test again (automation failures only); every attempt keeps its own report">Retries on failure <select id="rRetries"><option value="0">0</option><option value="1">1</option><option value="2">2</option></select></label><button data-runall="mobilewright">Run all MobileWright</button></div><div id="rProject"></div></div>
+    <details id="rLooseWrap"><summary>Loose files from earlier versions</summary><div id="rTests"></div></details>
+    <div id="rActive" style="display:none">
+      <div class="row"><h3 style="flex:1">Current run <span id="rStatus" class="stat"></span></h3><button id="rCancel">Cancel run</button></div>
+      <pre id="rOut" class="log" style="max-height:300px"></pre>
+      <div id="rResult"></div>
+    </div>
+    <details><summary>History</summary><div id="rHistory"></div></details>
+  </div>
+</dialog>
+
+<dialog id="automationDlg" aria-labelledby="automationTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="automationTitle">Switch device automation?</h2><button id="automationClose" aria-label="Close">×</button></div>
+    <div id="automationBody" class="note warn"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:12px"><button id="automationCancel">Cancel</button><button id="automationSwitch" class="primary">Stop and continue</button></div>
+  </div>
+</dialog>
+
+<dialog id="devDlg" aria-labelledby="devTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="devTitle">Devices</h2><button id="devRefresh">Refresh</button><button data-close>Close</button></div>
+    <div id="devList">Loading...</div>
+    <div id="devDetails"></div>
+  </div>
+</dialog>
+
+<dialog id="setupDlg" aria-labelledby="setupTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="setupTitle">Setup check</h2><button id="setupRe">Check again</button><button data-close>Close</button></div>
+    <div class="mut">Read-only checks. Nothing is installed or changed: each line says what to do yourself. Also available as <code>npm run doctor</code>.</div>
+    <div id="setupReady" class="note"></div>
+    <table class="chk" id="setupList"><tr><td>Checking...</td></tr></table>
+  </div>
+</dialog>
+
+<dialog id="benchDlg" class="wide" aria-labelledby="benchTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="benchTitle">Benchmarks</h2><button data-close>Close</button></div>
+    <div class="mut">Runs one saved MobileWright case several times with the same steps and checks, and reports medians and variation per phase. Uses the saved Plain test (an instrumented copy; your file is not changed). Also: <code>npm run bench -- --module m --case c</code>.</div>
+    <div class="grid2">
+      <label>Test case <select id="bCase"></select></label>
+      <label>Measured runs <input id="bRuns" type="number" min="1" max="30" value="5"></label>
+      <label>Warm-up runs (not counted) <input id="bWarm" type="number" min="0" max="3" value="1"></label>
+      <label class="chk"><input id="bReset" type="checkbox" checked> Restart the app before each run (not timed)</label>
+    </div>
+    <div class="row"><button id="bStart" class="primary">Start benchmark</button><button id="bCancel" style="display:none">Cancel</button><span id="bMsg" class="mut"></span></div>
+    <div id="bProgWrap" style="display:none"><div class="prog"><i id="bProg"></i></div></div>
+    <div id="bResult"></div>
+    <details><summary>Earlier benchmarks</summary><div id="bHist"></div></details>
+  </div>
+</dialog>
+
+<dialog id="textInputDlg" aria-labelledby="textInputTitle">
+  <form method="dialog" class="dlg">
+    <h2 id="textInputTitle">Type into the selected field</h2>
+    <label for="textInputValue" id="textInputLabel">Text to type</label>
+    <input id="textInputValue" type="text" autocomplete="off" style="width:100%">
+    <p id="textInputHint" class="mut"></p>
+    <div class="row"><button value="cancel" formnovalidate>Cancel</button><button value="submit" class="primary">Type on phone</button></div>
+  </form>
+</dialog>
+
+<dialog id="helpDlg" aria-labelledby="helpTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="helpTitle">How to use the recorder</h2><button data-close>Close</button></div>
+    <ol style="margin:0 0 0 18px;padding:0;line-height:1.7">
+      <li><b>Connect</b> the phone with USB debugging on and press <i>Refresh</i>. <i>Setup check</i> lists anything missing.</li>
+      <li><b>Record</b>: click on the phone picture to tap; drag to swipe. Pick another action (Type, Assert, Wait for...) in the toolbar first. Each step suggests checks: tick the ones the test should prove.</li>
+      <li><b>Save &amp; run</b>: give the test a name, choose Plain or POM, press <i>Save</i>, then <i>Run</i>. Results, screenshots and the likely cause of a failure are in <i>Reports</i>.</li>
+    </ol>
+    <h3>Keyboard shortcuts</h3>
+    <table class="chk" id="keysTable"></table>
+  </div>
+</dialog>
 
 <div id="menu"></div>
 <div id="toast"></div>
@@ -105,12 +337,12 @@
 const $ = (s) => document.querySelector(s);
 const MODES = [
   ['tap', 'Tap'], ['longpress', 'Long-press'], ['doubletap', 'Double-tap'], ['swipe', 'Swipe'],
-  ['type', 'Type'], ['scroll', 'Scroll to'], ['assert', 'Assert'], ['wait', 'Wait for'], ['inspect', 'Inspect'],
+  ['type', 'Type'], ['clear', 'Clear text'], ['scroll', 'Scroll to'], ['assert', 'Assert'], ['wait', 'Wait for'], ['inspect', 'Inspect'],
 ];
 let S = null;              // latest screen payload
 let steps = [];            // recorded steps
 let assets = [];           // cropped template images for coordinate taps
-let mode = 'tap';
+let mode = 'inspect';
 let busy = false;
 let drag = null;
 
@@ -128,36 +360,59 @@ function toast(msg, err) {
 }
 function setBusy(b, msg) {
   busy = b; $('#busy').textContent = b ? (msg || 'Working...') : '';
-  document.querySelectorAll('button').forEach((x) => (x.disabled = b));
+  document.querySelectorAll('header button:not(.hbtn), main button').forEach((x) => (x.disabled = b));
 }
 const tail = (id) => (id || '').split('/').pop();
 const titleOf = (n) => n.text || n.label || tail(n.identifier) || n.type.split('.').pop();
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Page (screen) of a step: named after the foreground activity ("com.app/.ui.LoginActivity" -> "Login"); renamable per step.
+const screenName = (activity) => { if (!activity) return 'App'; const n = activity.split('/').pop().split('.').pop().replace(/Activity$/, ''); return n.replace(/([a-z0-9])([A-Z])/g, '$1 $2') || 'App'; };
+const screenOf = (scr) => (scr ? { name: screenName(scr.activity), activity: scr.activity || null } : { name: 'App', activity: null });
+const SENSITIVE = /pass(word|code)?|pwd|\botp\b|\bpin\b|token|secret|cvv|security code/i;
+const secretEnvFor = (title) => 'VORTEX_SECRET_' + (String(title || 'value').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'VALUE').slice(0, 40);
 
 // ---------- toolbar ----------
+// The most used actions are always visible; the rest are one click away under "More". Every action has a key.
+const PRIMARY = ['inspect', 'tap', 'type', 'assert', 'wait', 'swipe', 'scroll'];
+const MODE_KEYS = { tap: 't', type: 'y', assert: 'a', wait: 'w', swipe: 's', scroll: 'o', longpress: 'l', doubletap: 'd', clear: 'c', inspect: 'i' };
 function buildToolbar() {
-  $('#toolbar').innerHTML = MODES.map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}">${l}</button>`).join('');
+  const cur = MODES.find(([k]) => k === mode && !PRIMARY.includes(k));
+  $('#toolbar').innerHTML = MODES.filter(([k]) => PRIMARY.includes(k)).map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}" title="${l} (${MODE_KEYS[k].toUpperCase()})">${l}</button>`).join('') +
+    `<button id="modeMore" class="${cur ? 'on' : ''}" title="Long-press, double-tap, clear text, inspect">${cur ? cur[1] : 'More'} &#9662;</button>`;
+}
+function popMenu(ev, title, items) {
+  const m = $('#menu');
+  m.innerHTML = `<b>${esc(title)}</b>` + items.map((it, i) => `<button data-i="${i}">${esc(it[0])}</button>`).join('') + '<button data-i="x">Cancel</button>';
+  m.style.display = 'flex';
+  m.style.left = Math.min(ev.clientX + 8, window.innerWidth - 250) + 'px';
+  m.style.top = Math.max(8, Math.min(ev.clientY + 8, window.innerHeight - 40 - (items.length + 1) * 34)) + 'px';
+  m._items = items;
 }
 $('#toolbar').addEventListener('click', (e) => {
+  if (e.target.closest('#modeMore')) return popMenu(e, 'More actions', MODES.filter(([k]) => !PRIMARY.includes(k)).map(([k, l]) => [`${l}  (${MODE_KEYS[k].toUpperCase()})`, () => setMode(k)]));
   const b = e.target.closest('button[data-mode]');
-  if (!b) return;
-  mode = b.dataset.mode; buildToolbar();
+  if (b) setMode(b.dataset.mode);
+});
+function setMode(k) {
+  mode = k; buildToolbar();
   const hint = {
     tap: 'Click an element to tap it. Drag to swipe.', longpress: 'Click an element to long-press it.', doubletap: 'Click an element to double-tap it.',
     swipe: 'Drag on the screen to swipe.', type: 'Click an input field, then enter the text.', scroll: 'Click the element you want to scroll to.',
     assert: 'Click an element, then choose the check to add.', wait: 'Click an element, then choose what to wait for.', inspect: 'Click an element to see all its locators.',
+    clear: 'Click an input field to clear its text.',
   }[mode];
   toast(hint);
-});
+}
 
 // ---------- screen ----------
 async function refresh() {
-  setBusy(true, 'Reading the screen...');
-  try { S = await api('/api/screen'); render(); } catch (e) { toast(e.message, true); } finally { setBusy(false); }
+  if (busy) return;
+  setBusy(true, 'Reading accessible controls...');
+  try { S = await api('/api/screen'); screenStale = !!S.stale; render(); } catch (e) { toast(e.message, true); } finally { setBusy(false); updateGuide(); }
 }
 function render() {
   const img = $('#shot');
-  const h = Math.max(420, Math.min(window.innerHeight - 150, 860));
+  const h = Math.max(400, Math.min(window.innerHeight - 215, 860));
   img.style.height = h + 'px'; img.style.width = Math.round((h * S.width) / S.height) + 'px';
   img.src = S.img;
   $('#srcBadge').textContent = 'tree: ' + S.source;
@@ -166,10 +421,14 @@ function render() {
   const wv = S.nodes.filter((n) => /WebView/.test(n.type)).length;
   $('#wvBadge').textContent = wv ? 'WebView on screen (' + wv + ')' : '';
   $('#wvBadge').style.display = wv ? '' : 'none';
+  $('#webStatus').textContent = S.stale ? 'Screen capture failed. Refresh before recording.' : wv ? 'WebView: inspect exposed text and IDs below. Unexposed content can use an explicit coordinate tap.' : 'Text / ID / accessibility locators from the captured screen';
   if (S.pkgChangedFrom) toast('Package changed from ' + S.pkgChangedFrom + ' to ' + S.pkg + ' (the app that is on screen).');
   if (document.activeElement !== $('#pkg')) $('#pkg').value = S.pkg;
   if (!S.appVisible) toast('The app "' + S.pkg + '" is not on screen. Open it on the phone, or fix the Package field, then Refresh.', true);
+  resetInspection();
   drawBoxes(null, null);
+  const available = Math.max(320, Math.min(window.innerHeight - $('#phone').getBoundingClientRect().top - 16, 860));
+  img.style.height = available + 'px'; img.style.width = Math.round(available * S.width / S.height) + 'px';
 }
 function scale() { const r = $('#shot').getBoundingClientRect(); return { sx: r.width / S.width, sy: r.height / S.height, r }; }
 function drawBoxes(hover, sel) {
@@ -179,27 +438,20 @@ function drawBoxes(hover, sel) {
   let html = '';
   if (sel) html += mk(sel, 'sel');
   if (hover) html += mk(hover, '');
+  if (INSPECT && INSPECT.screenId === S.screenId) html += `<div style="position:absolute;left:${INSPECT.point.x * sx}px;top:${INSPECT.point.y * sy}px;transform:translate(-50%,-50%);color:#ffcb69;font-size:24px;line-height:1;pointer-events:none;text-shadow:0 0 2px #000">+</div>`;
   $('#ov').innerHTML = html;
 }
 function toDevice(ev) {
   const { r } = scale();
   return { x: Math.round(((ev.clientX - r.left) * S.width) / r.width), y: Math.round(((ev.clientY - r.top) * S.height) / r.height) };
 }
-function hit(x, y) {
-  // Topmost element under the point: later siblings are drawn over earlier ones, so search children last-to-first.
-  if (!S._kids) {
-    S._kids = new Map();
-    for (const n of S.nodes) { if (!S._kids.has(n.parentId)) S._kids.set(n.parentId, []); S._kids.get(n.parentId).push(n); }
-  }
-  const inside = (n) => n.rect.w > 0 && n.rect.h > 0 && x >= n.rect.x && x < n.rect.x + n.rect.w && y >= n.rect.y && y < n.rect.y + n.rect.h;
-  const down = (list) => {
-    for (let i = list.length - 1; i >= 0; i--) {
-      const n = list[i];
-      if (inside(n)) return down(S._kids.get(n.id) || []) || n;
-    }
-    return null;
-  };
-  return down(S._kids.get(null) || []);
+function hit(x, y, nativeOnly = false) {
+  // Accessibility providers can flatten a modal before the underlying page.
+  // Sibling order then is not drawing order. Prefer a concrete small control
+  // at the point over a broad background row/container.
+  const candidates = S.nodes.filter(n => n.rect.w > 0 && n.rect.h > 0 && x >= n.rect.x && x < n.rect.x + n.rect.w && y >= n.rect.y && y < n.rect.y + n.rect.h);
+  candidates.sort((a,b) => a.rect.w*a.rect.h - b.rect.w*b.rect.h || b.depth-a.depth || b.id-a.id);
+  return candidates[0] || null;
 }
 function showInfo(n) {
   if (!n) { $('#info').textContent = 'No element here.'; return; }
@@ -212,14 +464,102 @@ function showInfo(n) {
     (t.warnings || []).map((w) => `<br><span class="warn">${esc(w)}</span>`).join('');
 }
 
+
+// ---------- snapshot inspector (read-only selection; explicit recording actions) ----------
+let INSPECT = null;
+const selectedNode = () => INSPECT && INSPECT.screenId === S?.screenId ? S.nodes.find(n => n.id === INSPECT.nodeId) || null : null;
+const pointText = (p) => `${p.x}, ${p.y}`;
+const percentText = (p) => `${(100 * p.x / S.width).toFixed(2)}%, ${(100 * p.y / S.height).toFixed(2)}%`;
+function resetInspection() { INSPECT = null; renderInspectorList(); $('#inspectDetail').textContent = 'Select a control or screen point. Inspect mode never taps the phone.'; }
+function renderInspectorList() {
+  const q = $('#inspectSearch').value.trim().toLocaleLowerCase();
+  const nodes = (S?.nodes || []).filter(n => !q || [n.text, n.label, n.identifier, n.type].some(x => String(x || '').toLocaleLowerCase().includes(q)));
+  $('#inspectCount').textContent = `${nodes.length} / ${S?.nodes.length || 0}`;
+  $('#inspectList').innerHTML = nodes.slice(0, 300).map(n => `<button data-inspect-node="${n.id}" style="text-align:left;white-space:normal"><b>${esc(titleOf(n))}</b> <small class="mut">${esc(n.type.split('.').pop())}${n.identifier ? ' · ' + esc(tail(n.identifier)) : ''}</small></button>`).join('') || '<span class="mut">No exposed controls match.</span>';
+  if (nodes.length > 300) $('#inspectList').insertAdjacentHTML('beforeend', '<span class="mut">Showing 300 controls. Refine the search.</span>');
+}
+function inspectorChoices(n) {
+  if (!n) return [];
+  const choices = n.target?.expr ? [{...n.target, note: 'Current recorded locator'}] : [];
+  for (const option of n.options || []) {
+    if (choices.some(x => x.expr === option.expr)) continue;
+    const by = {testId:'id', label:'label', text:'text'}[option.kind];
+    const value = by === 'id' ? n.identifier : by === 'label' ? n.label : n.text;
+    if (by && value) choices.push({...option, quality: by === 'id' ? 100 : 75, parts: {by, value}, warnings: [], viaAncestor: false, nodeId: n.id});
+  }
+  return choices;
+}
+function snapshotMatches(target) {
+  const p = target?.parts;
+  if (!p || !['id','label','text','type'].includes(p.by)) return null;
+  const field = {id:'identifier', label:'label', text:'text', type:'type'}[p.by];
+  const value = String(p.value || '').toLocaleLowerCase();
+  const all = S.nodes.filter(n => p.by === 'type' ? n.type.toLocaleLowerCase() === value : p.by === 'id' ? n[field] === p.value : String(n.text || '').toLocaleLowerCase().includes(value) || String(n.label || '').toLocaleLowerCase().includes(value));
+  return p.index === undefined ? all : all.slice(p.index, p.index + 1);
+}
+function selectInspection(n, point) {
+  if (!S) return;
+  INSPECT = {screenId:S.screenId, nodeId:n?.id ?? null, point:point || center(n), choices:inspectorChoices(n), choice:0};
+  $('#inspectPanel').open = true;
+  drawBoxes(null, n); showInfo(n);
+  const at = INSPECT.point;
+  const rows = [['Source','Captured accessibility tree'], ['Text',n?.text || 'Not exposed'], ['Accessibility label',n?.label || 'Not exposed'], ['Resource ID',n?.identifier || 'Not exposed'], ['Class',n?.type || 'No exposed element'], ['Bounds',n ? `x ${n.rect.x}, y ${n.rect.y}, ${n.rect.w} × ${n.rect.h}` : 'Point only'], ['Center',n ? pointText(center(n)) : '—'], ['Selected point',pointText(at)], ['Screen percentage',percentText(at)], ['Enabled',n?.enabled === undefined ? 'Not exposed' : String(n.enabled)], ['Checked',n?.checked == null ? 'Not exposed' : String(n.checked)], ['Selected',n?.selected == null ? 'Not exposed' : String(n.selected)]];
+  const options = INSPECT.choices.map((o,i) => `<option value="${i}">${esc(o.kind)} · ${esc(o.note || '')}</option>`).join('');
+  $('#inspectDetail').innerHTML = `<dl class="kv">${rows.map(([k,v]) => `<dt>${esc(k)}</dt><dd style="overflow-wrap:anywhere">${esc(v)}</dd>`).join('')}</dl>` +
+    `<div class="row"><button data-ins-copy="point">Copy pixels</button><button data-ins-copy="percent">Copy %</button>${n?.text ? '<button data-ins-copy="text">Copy text</button>' : ''}</div>` +
+    (options ? `<label class="row">Locator <select id="inspectChoice" style="max-width:100%">${options}</select></label><code id="inspectExpr" style="display:block;overflow-wrap:anywhere"></code><div class="row"><button data-ins-action="test">Highlight matches</button><button data-ins-copy="locator">Copy locator</button><button data-ins-action="use">Use for recording</button></div><p id="inspectMatch" class="mut"></p>` : '<p class="warn">No semantic locator is exposed for this target. Coordinate taps depend on the screen layout.</p>') +
+    `<div class="row"><button data-ins-action="tap" ${n?.target?.expr ? '' : 'disabled'}>Record tap</button><button data-ins-action="type" ${n && findInput(n)?.target?.expr ? '' : 'disabled'}>Record type</button><button data-ins-action="point">Record coordinate tap</button><button data-ins-action="assert" ${n?.target?.expr ? '' : 'disabled'}>Add assertion</button></div>` +
+    '<small class="mut">WebView text is available only when the app exposes it. Match counts describe this captured tree, not a live replay check.</small>';
+  if (options) { $('#inspectExpr').textContent = INSPECT.choices[0].expr; $('#inspectChoice').onchange = () => { INSPECT.choice = Number($('#inspectChoice').value); $('#inspectExpr').textContent = INSPECT.choices[INSPECT.choice].expr; $('#inspectMatch').textContent = ''; }; }
+}
+async function recordCoordinate(point) {
+  if (!S || busy || screenStale) return;
+  const target = {kind:'coordinate', expr:null, quality:10, warnings:['Explicit screen coordinate; layout changes can move the target.']};
+  const step = {type:'tap', title:'Screen point ' + pointText(point), target, x:point.x, y:point.y, pre:false, mode:'coord'};
+  step.asset = await cropAsset(point);
+  return perform({kind:'tap', x:point.x, y:point.y}, step);
+}
+$('#inspectSearch').addEventListener('input', renderInspectorList);
+$('#inspectList').addEventListener('click', (event) => { const b=event.target.closest('[data-inspect-node]'); if (!b || busy) return; const n=S?.nodes.find(n => String(n.id) === b.dataset.inspectNode); if (n) {setMode('inspect'); selectInspection(n,center(n));} });
+$('#inspectDetail').addEventListener('click', async (event) => {
+  const b=event.target.closest('button'); if (!b || !INSPECT || busy) return;
+  if (INSPECT.screenId !== S?.screenId || screenStale) return toast('Refresh and select the target again.',true);
+  const n=selectedNode(), choice=INSPECT.choices[INSPECT.choice];
+  if (b.dataset.insCopy) {
+    const value={point:pointText(INSPECT.point),percent:percentText(INSPECT.point),text:n?.text,locator:choice?.expr}[b.dataset.insCopy];
+    if (value) {try {await navigator.clipboard.writeText(value); toast('Copied');} catch {toast('Clipboard unavailable. Select the displayed value to copy.',true);}} return;
+  }
+  const action=b.dataset.insAction;
+  if (action==='test') {
+    const matches=snapshotMatches(choice);
+    $('#inspectMatch').textContent=matches ? `${matches.length} match(es) in this snapshot.` : 'Scoped locator: copy or use the existing suggested locator; simple match counting is unavailable.';
+    if (matches) { const {sx,sy}=scale(); $('#ov').innerHTML=matches.map(m=>`<div class="box sel" style="left:${m.rect.x*sx}px;top:${m.rect.y*sy}px;width:${m.rect.w*sx}px;height:${m.rect.h*sy}px"></div>`).join(''); } return;
+  }
+  if (action==='use') {
+    const matches=snapshotMatches(choice);
+    if (matches && (matches.length!==1 || matches[0].id!==n?.id)) return toast('This locator does not uniquely identify the selected control. Use its scoped or positional suggestion.',true);
+    if (!n || !choice) return;
+    n.target={...choice}; showInfo(n); toast('Locator chosen for subsequent actions on this captured control.'); return;
+  }
+  if (action==='point') return recordCoordinate(INSPECT.point);
+  if (action==='tap' && n) {
+    const p=INSPECT.point;
+    return perform({kind:'tap',x:p.x,y:p.y}, {type:'tap',title:titleOf(n),target:n.target,x:p.x,y:p.y,pre:true,mode:'name'});
+  }
+  if (action==='type' && n) {setMode('type'); return onClick(center(findInput(n)),event);}
+  if (action==='assert' && n) {setMode('assert'); return showMenu(n,event);}
+});
+$('#btnInspector').onclick = () => {setMode('inspect'); $('#inspectPanel').open=true; $('#inspectPanel').scrollIntoView({block:'nearest'}); $('#inspectSearch').focus();};
+$('#wvBadge').onclick = () => $('#btnInspector').click();
+
 // ---------- pointer handling ----------
 const ov = $('#ov');
 ov.addEventListener('pointermove', (e) => {
   if (!S || busy) return;
   const p = toDevice(e); const n = hit(p.x, p.y);
-  drawBoxes(n, null); showInfo(n);
+  drawBoxes(n, selectedNode()); if (!INSPECT) showInfo(n);
 });
-ov.addEventListener('pointerleave', () => drawBoxes(null, null));
+ov.addEventListener('pointerleave', () => drawBoxes(null, selectedNode()));
 ov.addEventListener('pointerdown', (e) => { if (!S || busy) return; drag = { start: toDevice(e), t: Date.now() }; ov.setPointerCapture(e.pointerId); });
 ov.addEventListener('pointerup', (e) => {
   if (!S || busy || !drag) return;
@@ -239,7 +579,7 @@ async function doSwipe(a, b, ms) {
   const dir = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? 'up' : 'down') : (dx < 0 ? 'left' : 'right');
   const distance = Math.round(Math.hypot(dx, dy));
   await perform({ kind: 'swipe', x: a.x, y: a.y, x2: b.x, y2: b.y, duration: Math.max(200, Math.min(ms, 1200)) },
-    { type: 'swipe', title: 'swipe ' + dir, args: { direction: dir, distance } });
+    { type: 'swipe', title: 'swipe ' + dir, args: { direction: dir, distance, from: { x: a.x, y: a.y }, to: { x: b.x, y: b.y }, duration: Math.max(200, Math.min(ms, 1200)) } });
 }
 
 async function cropAsset(p) {
@@ -256,36 +596,63 @@ async function cropAsset(p) {
 }
 
 function center(n) { return { x: Math.round(n.rect.x + n.rect.w / 2), y: Math.round(n.rect.y + n.rect.h / 2) }; }
+function askInputText(fieldName, sensitive) {
+  const dialog = $('#textInputDlg'), input = $('#textInputValue');
+  if (dialog.open) return Promise.resolve(null);
+  $('#textInputLabel').textContent = `Text to type into "${fieldName}"`;
+  $('#textInputHint').textContent = sensitive ? 'Sensitive value: typed on the phone; only an environment-variable reference is saved.' : 'Replaces the current value in the selected editable field.';
+  input.type = sensitive ? 'password' : 'text'; input.value = '';
+  dialog.returnValue = 'cancel';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => {
+      const value = dialog.returnValue === 'submit' ? input.value : null;
+      input.value = ''; resolve(value);
+    }, {once:true});
+    dialog.showModal(); input.focus();
+  });
+}
 function findInput(n) {
   let cur = n;
   while (cur) { if (/EditText|TextField/i.test(cur.type)) return cur; cur = cur.parentId === null ? null : S.nodes[cur.parentId]; }
   return null;
 }
 
-async function onClick(pt, ev) {
-  const n = hit(pt.x, pt.y);
-  if (!n) return toast('No element at that point.');
-  if (mode === 'inspect') {
-    drawBoxes(null, n); showInfo(n);
-    $('#info').innerHTML += '<br><b>All locators:</b><br>' + (n.options.length ? n.options.map((o) => `${esc(o.expr)} <small>(${o.note})</small>`).join('<br>') : 'none');
-    return;
+async function onClick(pt, ev, nativeOnly = false) {
+  const n = hit(pt.x, pt.y, nativeOnly);
+  if (mode === 'inspect') return selectInspection(n, pt);
+  if (!n) {
+    if (mode === 'tap' && $('#tapStyle').value === 'coord') return recordCoordinate(pt);
+    return toast('No exposed element here. Use Inspect to select this screen point.');
   }
   if (['tap', 'longpress', 'doubletap'].includes(mode)) {
-    const t = n.target;
-    const step = { type: mode, title: titleOf(n), target: t, x: pt.x, y: pt.y, pre: true, mode: $('#tapStyle').value };
+    const opaqueWeb = S.nodes.some(w => /WebView$/.test(w.type) && pt.x >= w.rect.x && pt.x < w.rect.x + w.rect.w && pt.y >= w.rect.y && pt.y < w.rect.y + w.rect.h) && !n.text && !n.label && /WebView|Layout|ViewGroup/.test(n.type);
+    const t = opaqueWeb || $('#tapStyle').value === 'coord' ? { kind: 'coordinate', expr: null, quality: 10, warnings: ['Uses the recorded screen position; layout changes can move this target.'] } : n.target;
+    const step = { type: mode, title: opaqueWeb ? 'WebView position' : titleOf(n), target: t, x: pt.x, y: pt.y, pre: t.kind !== 'coordinate', mode: t.kind === 'coordinate' ? 'coord' : $('#tapStyle').value };
     if (t.kind === 'coordinate') step.asset = await cropAsset(pt);
     return perform({ kind: mode, x: pt.x, y: pt.y }, step);
   }
   if (mode === 'type') {
     const input = findInput(n);
-    const text = window.prompt('Text to type' + (input ? ' into "' + titleOf(input) + '"' : ' at the clicked position'));
+    if (!input || input.target.kind === 'coordinate' || !input.target.parts || input.target.viaAncestor) return toast('No editable locator is exposed here. Tap the input, Refresh, then try Type. If the WebView exposes no editable field, typing cannot be recorded with a semantic locator.', true);
+    const fieldName = titleOf(input || n);
+    const looksSecret = SENSITIVE.test([fieldName, (input || n).identifier, (input || n).label].join(' '));
+    const inputScreenId = S.screenId;
+    const text = await askInputText(fieldName, looksSecret);
     if (text === null) return;
+    if (S.screenId !== inputScreenId || screenStale) return toast('The screen changed while entering text. Refresh and select the input again.', true);
     // Tap the real field when it is in the tree; otherwise tap exactly where you clicked (not the middle of some parent box).
     const c = input ? center(input) : pt;
     const noLocator = { kind: 'coordinate', expr: null, quality: 10, warnings: ['no input element found here: the clicked position is used'] };
-    const step = { type: 'type', title: titleOf(input || n), target: input ? input.target : noLocator, args: { text }, x: c.x, y: c.y, pre: true };
+    const step = { type: 'type', title: fieldName, target: input ? input.target : noLocator, args: looksSecret ? {} : { text }, x: c.x, y: c.y, pre: true };
+    if (looksSecret) { step.secretEnv = secretEnvFor(fieldName); toast('Sensitive input: the test reads it from ' + step.secretEnv + ' at run time.'); }
     if (!input || step.target.kind === 'coordinate') step.asset = await cropAsset(c);
-    return perform({ kind: 'text', x: c.x, y: c.y, text }, step);
+    return perform({ kind: 'text', nodeId: input.id, x: c.x, y: c.y, text }, step);
+  }
+  if (mode === 'clear') {
+    const input = findInput(n);
+    if (!input || input.target.kind === 'coordinate') return toast('Click an input field that has a locator to clear it.', true);
+    const c = center(input);
+    return perform({ kind: 'clear', x: c.x, y: c.y, length: (input.text || '').length }, { type: 'clear', title: titleOf(input), target: input.target, x: c.x, y: c.y, pre: true });
   }
   if (mode === 'scroll') {
     return perform({ kind: 'scroll' }, { type: 'scroll_to', title: titleOf(n), target: n.target });
@@ -297,21 +664,23 @@ async function onClick(pt, ev) {
 function showMenu(n, ev) {
   const items = [];
   const t = n.target;
+  const recordCheck = (st) => addStep({ ...(n._webStep || {}), ...st });
   if (t.kind === 'coordinate') return toast('This element has no locator, so it cannot be asserted. Pick a labelled element.', true);
   if (mode === 'wait') {
-    items.push(['Wait until visible', () => addStep({ type: 'wait_visible', title: titleOf(n), target: t })]);
-    items.push(['Wait until it disappears', () => addStep({ type: 'wait_hidden', title: titleOf(n), target: t })]);
+    items.push(['Wait until visible', () => recordCheck({ type: 'wait_visible', title: titleOf(n), target: t })]);
+    items.push(['Wait until it disappears', () => recordCheck({ type: 'wait_hidden', title: titleOf(n), target: t })]);
+    items.push(['Wait until enabled', () => recordCheck({ type: 'wait_enabled', title: titleOf(n), target: t })]);
   } else {
-    const A = (label, assertion, expected) => items.push([label, () => addStep({ type: 'assert', title: titleOf(n), target: t, args: { assertion, expected } })]);
+    const A = (label, assertion, expected) => items.push([label, () => recordCheck({ type: 'assert', title: titleOf(n), target: t, args: { assertion, expected } })]);
     A('is visible', 'visible');
     A('is hidden', 'hidden');
     A('is enabled', 'enabled');
     A('is disabled', 'disabled');
     const cur = n.text || n.label;
     if (cur) A('text equals "' + cur.slice(0, 28) + '"', 'text', cur);
-    items.push(['text contains...', () => { const v = prompt('Text should contain'); if (v) addStep({ type: 'assert', title: titleOf(n), target: t, args: { assertion: 'contains', expected: v } }); }]);
+    items.push(['text contains...', () => { const v = prompt('Text should contain'); if (v) recordCheck({ type: 'assert', title: titleOf(n), target: t, args: { assertion: 'contains', expected: v } }); }]);
     if (n.checked !== null) { A('is checked', 'checked'); A('is unchecked', 'unchecked'); }
-    if (n.identifier) { const c = S.nodes.filter((x) => x.identifier === n.identifier).length; items.push(['count equals ' + c + ' (all with this id)', () => addStep({ type: 'assert', title: titleOf(n), target: { ...t, expr: 'screen.getByTestId(' + (t.expr.match(/getByTestId\((.*?)\)/)?.[1] ?? "''") + ')' }, args: { assertion: 'count', expected: c } })]); }
+    if (n.identifier && !n._web) { const c = S.nodes.filter((x) => x.identifier === n.identifier).length; items.push(['count equals ' + c + ' (all with this id)', () => recordCheck({ type: 'assert', title: titleOf(n), target: { ...t, expr: 'screen.getByTestId(' + (t.expr.match(/getByTestId\((.*?)\)/)?.[1] ?? "''") + ')', parts: { by: 'id', value: n.identifier } }, args: { assertion: 'count', expected: c } })]); }
   }
   const m = $('#menu');
   m.innerHTML = '<b>' + esc(titleOf(n)) + '</b>' + items.map((it, i) => `<button data-i="${i}">${esc(it[0])}</button>`).join('') + '<button data-i="x">Cancel</button>';
@@ -328,31 +697,51 @@ $('#menu').addEventListener('click', (e) => {
 document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#menu')) $('#menu').style.display = 'none'; }, true);
 
 // ---------- steps ----------
-function addStep(st) { steps.push(st); renderSteps(); regenerate(); }
+function addStep(st) { if (!st.screen) st.screen = screenOf(S); steps.push(st); renderSteps(); regenerate(); }
 
+let screenStale = false;
 async function perform(body, step) {
+  if (screenStale) return toast('Refresh the screen before continuing. The previous action was recorded.', true);
   setBusy(true, 'Running on the phone and waiting for the screen to settle...');
   try {
-    const res = await api('/api/action', body);
+    step.screen ||= screenOf(S);
+    const res = await api('/api/action', { ...body, screenId: S.screenId });
+    if (res.actionCompleted && !res.screen) {
+      step.comment = 'Action completed; screen capture failed. Review the next step after refreshing.';
+      steps.push(step);
+      screenStale = true;
+      renderSteps(); regenerate(); autosave();
+      toast(res.warning, true);
+      return;
+    }
+    step.screenAfter = screenOf(res.screen);
     step.settleMs = res.settleMs;
+    // post-action verification: almost nothing changed after a tap-like action
+    if (typeof res.screenChange === 'number' && res.screenChange < 0.003 && ['tap', 'doubletap', 'longpress'].includes(step.type)) step.noChange = true;
     step.sugg = (res.suggestions || []).map((s, i) => ({ ...s, on: i === 0 }));
-    S = res.screen; steps.push(step);
+    S = res.screen; screenStale = !!S.stale; steps.push(step);
     render(); renderSteps(); regenerate();
   } catch (e) { toast(e.message, true); } finally { setBusy(false); }
 }
 
 function stepSummary(st) {
   const t = st.title ? ' "' + st.title + '"' : '';
-  return ({ tap: 'Tap', longpress: 'Long-press', doubletap: 'Double-tap', scroll_to: 'Scroll to', type: 'Type into', wait_visible: 'Wait for', wait_hidden: 'Wait until gone:', assert: 'Check' }[st.type] || '') + t ||
+  const a = st.args || {};
+  const fixed = { hide_keyboard: 'Hide the keyboard', launch_app: 'Launch the app', close_app: 'Close the app', deep_link: 'Open ' + (a.url || ''), check_activity: 'Check screen is ' + (a.activity || '').split('/').pop(), checkpoint: 'Screenshot checkpoint "' + (a.name || '') + '"' }[st.type];
+  if (fixed) return fixed;
+  return ({ tap: 'Tap', longpress: 'Long-press', doubletap: 'Double-tap', scroll_to: 'Scroll to', type: 'Type into', clear: 'Clear', wait_visible: 'Wait for', wait_hidden: 'Wait until gone:', wait_enabled: 'Wait until enabled:', assert: 'Check' }[st.type] || '') + t ||
     st.type;
 }
 function renderSteps() {
+  autosave(false);
   $('#steps').innerHTML = steps.map((st, i) => {
     const T = st.target;
     const kind = T ? `<span class="badge ${T.quality >= 85 ? 'good' : T.quality >= 55 ? 'warn' : 'bad'}">${T.kind}</span>` : '';
     let hd = st.type === 'swipe' ? 'Swipe ' + st.args.direction + ' (' + st.args.distance + ' px)' : st.type === 'press' ? 'Press ' + st.args.key : st.type === 'sleep' ? 'Wait ' + st.args.ms + ' ms' : stepSummary(st);
     if (st.type === 'assert') hd = 'Check "' + (st.title || '') + '": ' + st.args.assertion + (st.args.expected !== undefined ? ' ' + st.args.expected : '');
-    const isTap = st.type === 'tap' && T && T.kind !== 'coordinate';
+    if (st.type === 'type') hd += st.secretEnv ? ': \u2022\u2022\u2022\u2022' : ': "' + (st.args.text ?? '') + '"';
+    const isWeb = st.context === 'WEBVIEW';
+    const isTap = st.type === 'tap' && T && T.kind !== 'coordinate' && !isWeb;
     const pre = (['tap', 'longpress', 'doubletap', 'type'].includes(st.type) && T && T.kind !== 'coordinate' && (!isTap || (st.mode || 'both') === 'name'))
       ? `<div class="pre"><label><input type="checkbox" data-pre="${i}" ${st.pre !== false ? 'checked' : ''}> check it is visible first (pre-assertion)</label></div>` : '';
     const style = isTap
@@ -364,15 +753,56 @@ function renderSteps() {
           `<label><input type="checkbox" data-sg="${i}:${j}" ${s.on ? 'checked' : ''}> ${esc(s.assertion)} <b>${esc(s.title)}</b> <small>(${esc(s.reason)})</small></label>`).join('') + '</div>' : '';
     const warn = T && T.warnings && T.warnings.length ? `<div class="warn">${esc(T.warnings[0])}</div>` : '';
     const slow = st.settleMs > 2500 ? `<div class="warn">screen took ${(st.settleMs / 1000).toFixed(1)} s to settle</div>` : '';
-    return `<div class="step"><div class="hd"><span class="badge">${i + 1}</span><b>${esc(hd)}</b>${kind}<button class="x" data-del="${i}">x</button></div>` +
-      (T && T.expr ? `<div class="expr">${esc(T.expr)}</div>` : '') + warn + slow + style + pre + sugg + '</div>';
-  }).join('') || '<div class="panel">No steps yet. Click on the phone screen to record your first action.</div>';
+    const still = st.noChange ? '<div class="warn">the screen did not change after this action: check that it reached the right element</div>' : '';
+    const vis = st.asset && T && T.kind === 'coordinate' && !isWeb
+      ? `<div class="pre"><button data-vfind="${i}" title="Look for the recorded picture of this element on the current screen">Find on screen</button>${st.visual ? ` <span class="${st.visual.found ? 'ok' : 'warn'}">${esc(st.visual.text)}</span>${st.visual.found && (st.visual.x !== st.x || st.visual.y !== st.y) ? ` <button data-vuse="${i}">Use (${st.visual.x}, ${st.visual.y})</button>` : ''}` : ''}</div>` : '';
+    const scr = st.screen || { name: 'App', activity: null };
+    const page = `<div class="pg" title="${esc(scr.activity || 'activity unknown')}">Page <input data-page="${i}" value="${esc(scr.name)}">${st.screenAfter && st.screenAfter.name !== scr.name ? ' &rarr; ' + esc(st.screenAfter.name) : ''}</div>`;
+    const sens = st.type === 'type' && T && T.kind !== 'coordinate'
+      ? `<div class="pre"><label><input type="checkbox" data-sens="${i}" ${st.secretEnv ? 'checked' : ''}> sensitive input (password, token, OTP): never stored</label>` +
+        (st.secretEnv ? `<div class="pg">read from <input class="secret-env" data-env="${i}" value="${esc(st.secretEnv)}"></div>` : '') + '</div>' : '';
+    return `<div class="step" id="step-${i}"><div class="hd"><span class="badge">${i + 1}</span><b>${esc(hd)}</b>${isWeb ? '<span class="ctx web">web</span>' : ''}${kind}<button class="x" data-del="${i}" title="Delete this step">x</button></div>` +
+      (T && T.expr ? `<div class="expr">${esc(T.expr)}${isWeb && T.parts && T.parts.frames ? ' <span class="mut">in iframe ' + esc(T.parts.frames.join(' > ')) + '</span>' : ''}</div>` : '') + warn + slow + still + vis + style + pre + sens + sugg + page + '</div>';
+  }).join('') || `<div class="empty"><b>No steps yet.</b><ol><li>Click on the phone picture to <b>tap</b> (drag to <b>swipe</b>).</li><li>To type, check or wait: pick <b>Type</b>, <b>Assert</b> or <b>Wait for</b> first, then click the element.</li><li>Press <b>Save</b>, then <b>Run</b>.</li></ol>Keys: <kbd>T</kbd> tap · <kbd>Y</kbd> type · <kbd>A</kbd> assert · <kbd>W</kbd> wait · <kbd>R</kbd> refresh · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>?</kbd> all shortcuts</div>`;
+  updateGuide();
 }
-$('#steps').addEventListener('click', (e) => {
+$('#steps').addEventListener('click', async (e) => {
+  const vf = e.target.closest('[data-vfind]'), vu = e.target.closest('[data-vuse]');
+  if (vf) {
+    const st = steps[+vf.dataset.vfind];
+    const a = assets.find((x) => x.name === st.asset);
+    if (!a) return toast('The picture for this step is not in this browser any more.', true);
+    const r = await call('/api/visual/find', { template: a.dataUrl });
+    if (!r.ok) return toast(r.data.error || 'Visual search failed', true);
+    const m = r.data;
+    st.visual = { found: m.found, x: m.center ? m.center.x : null, y: m.center ? m.center.y : null, text: m.found ? `found ${(m.confidence * 100).toFixed(1)}% at (${m.center.x}, ${m.center.y}), scale ${m.scale}, ${m.timeMs} ms` : `not used: ${m.reason}` };
+    if (m.rect && S) { const { sx, sy } = scale(); $('#ov').innerHTML = `<div class="box ${m.found ? 'sel' : 'hit'}" style="left:${m.rect.x * sx}px;top:${m.rect.y * sy}px;width:${m.rect.w * sx}px;height:${m.rect.h * sy}px"></div>`; }
+    toast(st.visual.text + (m.found ? '' : ' (a low-confidence match is never used)'), !m.found);
+    renderSteps(); return;
+  }
+  if (vu) {
+    const st = steps[+vu.dataset.vuse];
+    if (st.visual && st.visual.found && confirm(`Move this step's tap from (${st.x}, ${st.y}) to the matched position (${st.visual.x}, ${st.visual.y})?`)) { st.x = st.visual.x; st.y = st.visual.y; renderSteps(); regenerate(); }
+    return;
+  }
   const d = e.target.closest('[data-del]');
   if (d) { steps.splice(+d.dataset.del, 1); renderSteps(); regenerate(); }
 });
 $('#steps').addEventListener('change', (e) => {
+  const pg = e.target.dataset.page, sn = e.target.dataset.sens, ev = e.target.dataset.env;
+  if (pg !== undefined) {
+    // Rename the page for every step recorded on the same activity (or just this step when the activity is unknown).
+    const name = e.target.value.trim() || 'App', act = (steps[+pg].screen || {}).activity;
+    for (const x of steps) for (const k of ['screen', 'screenAfter']) if (x[k] && (act ? x[k].activity === act : x === steps[+pg] && k === 'screen')) x[k] = { ...x[k], name };
+    renderSteps(); regenerate(); return;
+  }
+  if (sn !== undefined) {
+    const x = steps[+sn];
+    if (e.target.checked) { x.secretEnv = secretEnvFor(x.title); delete x.args.text; toast('The typed value was removed from the recording. The test reads ' + x.secretEnv + ' at run time.'); }
+    else { const v = prompt('Not sensitive: enter the value to store in the test'); if (v === null) { e.target.checked = true; return; } delete x.secretEnv; x.args.text = v; }
+    renderSteps(); regenerate(); return;
+  }
+  if (ev !== undefined) { const v = e.target.value.trim().toUpperCase(); if (/^[A-Z][A-Z0-9_]{0,63}$/.test(v)) steps[+ev].secretEnv = v; else { toast('Use letters, digits and _ (starting with a letter).', true); e.target.value = steps[+ev].secretEnv; } renderSteps(); regenerate(); return; }
   const p = e.target.dataset.pre, g = e.target.dataset.sg, st = e.target.dataset.style;
   if (st !== undefined) { steps[+st].mode = e.target.value; renderSteps(); }
   if (p !== undefined) steps[+p].pre = e.target.checked;
@@ -381,11 +811,65 @@ $('#steps').addEventListener('change', (e) => {
 });
 
 let regenTimer;
+let PREVIEW = { files: [], active: null };
+const stepPayload = () => steps.map((s) => ({ ...s, post: (s.sugg || []).filter((x) => x.on) }));
+const frameworksOf = () => ['mobilewright'];
+function projectBody(extra) {
+  return { steps: stepPayload(), name: $('#tname').value, module: $('#tmodule').value, pkg: $('#pkg').value || (S && S.pkg), frameworks: frameworksOf($('#fw').value), mode: $('#mode').value, target: $('#target').value, ...extra };
+}
+function showIssues(list) {
+  const box = $('#codeIssues');
+  if (!list || !list.length) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const fwName = { mobilewright: 'MobileWright' };
+  box.innerHTML = '<b>These steps cannot be generated yet (nothing is saved until they are fixed):</b><ul style="margin:4px 0 0 18px;padding:0">' +
+    list.map((i) => `<li>${i.framework ? esc(fwName[i.framework] + ' ' + i.variant) + ', ' : ''}step ${i.step}: ${esc(i.message)} <button type="button" class="issue-step-btn" data-issue-step="${Math.max(0, Number(i.step) - 1)}">Go to step</button></li>`).join('') + '</ul>';
+}
+$('#codeIssues').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-issue-step]');
+  if (!b) return;
+  document.getElementById('step-' + b.dataset.issueStep)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+function renderTabs() {
+  const groups = {};
+  for (const f of PREVIEW.files) (groups[f.framework + ' ' + f.variant] = groups[f.framework + ' ' + f.variant] || []).push(f);
+  $('#fileTabs').innerHTML = Object.entries(groups).map(([g, fs]) => `<span class="grp">${esc(g.replace('mobilewright', 'MobileWright'))}</span>` +
+    fs.map((f) => `<button data-file="${esc(f.path)}" class="${f.path === PREVIEW.active ? 'on' : ''}" title="${esc(f.path)}">${esc(f.path.split('/').pop())}${f.role === 'entry' ? ' &#9654;' : ''}</button>`).join('')).join('');
+  const f = PREVIEW.files.find((x) => x.path === PREVIEW.active);
+  $('#code').value = f ? f.content : '';
+}
+$('#fileTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-file]'); if (!b) return; PREVIEW.active = b.dataset.file; renderTabs(); });
+function syncControls() {
+  const fw = $('#fw').value;
+  $('#modeWrap').style.display = fw === 'legacy' ? 'none' : '';
+  $('#tmodule').closest('label').style.display = fw === 'legacy' ? 'none' : '';
+  $('#targetWrap').style.display = fw !== 'legacy' && $('#mode').value === 'both' ? '' : 'none';
+  $('#btnSave').textContent = fw === 'legacy' ? 'Save .spec.ts' : 'Save to project';
+}
 function regenerate() {
   clearTimeout(regenTimer);
   regenTimer = setTimeout(async () => {
-    const payload = steps.map((s) => ({ ...s, post: (s.sugg || []).filter((x) => x.on) }));
-    try { const r = await api('/api/generate', { steps: payload, name: $('#tname').value, pkg: $('#pkg').value || (S && S.pkg) }); $('#code').value = r.code; } catch (e) { toast(e.message, true); }
+    syncControls();
+    const fw = $('#fw').value;
+    if (fw === 'legacy') {
+      // The original single-file format, unchanged (src/codegen.js).
+      showIssues(null); $('#fileTabs').innerHTML = ''; $('#saveWhere').textContent = '';
+      try { const r = await api('/api/generate', { steps: stepPayload(), name: $('#tname').value, pkg: $('#pkg').value || (S && S.pkg) }); PREVIEW = { files: [{ path: 'legacy.spec.ts', content: r.code }], active: 'legacy.spec.ts' }; $('#code').value = r.code; } catch (e) { toast(e.message, true); }
+      return;
+    }
+    const r = await call('/api/project/preview', projectBody());
+    if (!r.ok && r.data.code === 'UNAVAILABLE') {
+      // Node.js older than 22.18: only the original single-file MobileWright output is available.
+      $('#fw').value = 'legacy'; toast('Projects and POM output need Node.js 22.18 or newer. Showing the single-file MobileWright format.', true); return regenerate();
+    }
+    if (!r.ok) { showIssues([{ step: '-', message: r.data.error || 'Generation failed' }]); return; }
+    const d = r.data;
+    $('#saveWhere').textContent = 'to ' + d.ref.module + '/' + d.ref.case + (d.exists ? ' (exists: edited files are kept)' : '');
+    showIssues(d.issues);
+    const keep = d.files.some((f) => f.path === PREVIEW.active) ? PREVIEW.active : (d.files.find((f) => f.role === 'entry') || d.files[0] || {}).path;
+    PREVIEW = { files: d.files, active: keep };
+    if (!d.files.length) { $('#fileTabs').innerHTML = ''; $('#code').value = ''; return; }
+    renderTabs();
   }, 80);
 }
 
@@ -394,28 +878,547 @@ $('#btnRefresh').onclick = refresh;
 $('#btnBack').onclick = () => perform({ kind: 'key', key: 'BACK' }, { type: 'press', title: 'Back', args: { key: 'BACK' } });
 $('#btnHome').onclick = () => perform({ kind: 'key', key: 'HOME' }, { type: 'press', title: 'Home', args: { key: 'HOME' } });
 $('#btnEnter').onclick = () => perform({ kind: 'key', key: 'ENTER' }, { type: 'press', title: 'Enter', args: { key: 'ENTER' } });
+$('#btnMore').onclick = (ev) => {
+  const items = [
+    ['App switch (recent apps)', () => perform({ kind: 'key', key: 'APP_SWITCH' }, { type: 'press', title: 'App switch', args: { key: 'APP_SWITCH' } })],
+    ['Hide the keyboard', () => perform({ kind: 'hide_keyboard' }, { type: 'hide_keyboard', title: 'Hide keyboard', args: {} })],
+    ['Launch the app', () => perform({ kind: 'launch_app' }, { type: 'launch_app', title: 'Launch app', args: {} })],
+    ['Close the app', () => { if (confirm('Close (force-stop) ' + ($('#pkg').value || 'the app') + ' on the phone?')) perform({ kind: 'close_app' }, { type: 'close_app', title: 'Close app', args: {} }); }],
+    ['Open deep link...', () => { const url = prompt('Deep link URL (for example myapp://orders/42)'); if (url) perform({ kind: 'deep_link', url: url.trim() }, { type: 'deep_link', title: 'Deep link', args: { url: url.trim() } }); }],
+    ['Check the current screen', () => { if (!S || !S.activity) return toast('The current activity is not known. Refresh the screen first.', true); addStep({ type: 'check_activity', title: screenName(S.activity), args: { activity: S.activity } }); }],
+    ['Screenshot checkpoint...', () => { const name = prompt('Checkpoint name', 'checkpoint-' + (steps.length + 1)); if (name) addStep({ type: 'checkpoint', title: name, args: { name } }); }],
+  ];
+  const m = $('#menu');
+  m.innerHTML = '<b>More actions</b>' + items.map((it, i) => `<button data-i="${i}">${esc(it[0])}</button>`).join('') + '<button data-i="x">Cancel</button>';
+  m.style.display = 'flex';
+  m.style.left = Math.min(ev.clientX + 8, window.innerWidth - 240) + 'px';
+  m.style.top = Math.min(ev.clientY + 8, window.innerHeight - 40 - items.length * 34) + 'px';
+  m._items = items;
+};
 $('#btnDebug').onclick = async () => { try { const r = await api('/api/debug', {}); toast('Saved: ' + r.file); } catch (e) { toast(e.message, true); } };
 $('#btnSleep').onclick = () => addStep({ type: 'sleep', title: '', args: { ms: 1500 } });
 $('#btnUndo').onclick = () => { steps.pop(); renderSteps(); regenerate(); };
-$('#btnClear').onclick = () => { if (!steps.length || confirm('Remove all recorded steps?')) { steps = []; assets = []; renderSteps(); regenerate(); } };
+$('#btnClear').onclick = () => { if (!steps.length || confirm('Remove all recorded steps?')) { steps = []; assets = []; renderSteps(); regenerate(); clearAutosave(); } };
 $('#btnCopy').onclick = async () => { try { await navigator.clipboard.writeText($('#code').value); toast('Copied.'); } catch { $('#code').select(); toast('Press Ctrl+C to copy.'); } };
 $('#btnSave').onclick = async () => {
+  if ($('#fw').value !== 'legacy') return saveProject([]);
   try {
     const used = new Set(steps.filter((s) => s.asset).map((s) => s.asset));
     const r = await api('/api/save', { name: $('#tname').value, code: $('#code').value, assets: assets.filter((a) => used.has(a.name)) });
     toast('Saved: ' + r.file);
+    autosave(true);
   } catch (e) { toast(e.message, true); }
 };
 $('#tname').addEventListener('input', regenerate);
+$('#tmodule').addEventListener('input', regenerate);
+async function saveProject(replace) {
+  const used = new Set(steps.filter((s) => s.asset).map((s) => s.asset));
+  const r = await call('/api/project/save', projectBody({ assets: assets.filter((a) => used.has(a.name)), replace }));
+  if (!r.ok) {
+    if (r.data.issues) { showIssues(r.data.issues); toast('Not saved: fix the listed steps first.', true); }
+    else toast(r.data.error || 'Not saved', true);
+    return;
+  }
+  const d = r.data;
+  autosave(true);
+  const li = (arr) => arr.map((x) => `<li>${esc(x)}</li>`).join('');
+  let html = `<p style="margin:0">Case folder: <code>${esc(d.caseDir)}</code></p>`;
+  if (d.written.length || d.replaced.length) html += `<h3>Written</h3><ul class="steps-report">${li([...d.written, ...d.replaced])}</ul>`;
+  if (d.unchanged.length) html += `<details><summary>${d.unchanged.length} unchanged</summary><ul class="steps-report">${li(d.unchanged)}</ul></details>`;
+  if (d.removed.length) html += `<h3>Removed (generated earlier, unchanged, no longer produced)</h3><ul class="steps-report">${li(d.removed)}</ul>`;
+  if (d.keptStale.length) html += `<div class="note warn">Kept because you edited them (no longer generated): <ul class="steps-report">${li(d.keptStale)}</ul></div>`;
+  if (d.recordingBackup) html += `<p class="mut">Previous recording kept as ${esc(d.recordingBackup)}.</p>`;
+  if (d.conflicts.length) {
+    html += `<div class="note warn"><b>${d.conflicts.length} file(s) were edited after Vortex generated them (or were not written by Vortex). They were NOT replaced.</b> The new version is next to each one as <code>.vortex-new</code>. Tick a file to replace your version with the new one:` +
+      d.conflicts.map((c) => `<label style="display:block;margin-top:4px"><input type="checkbox" data-repl="${esc(c.path)}"> <code>${esc(c.path)}</code> <span class="mut">(${c.reason === 'edited' ? 'edited by you' : 'not created by Vortex'}; new: ${esc(c.newFile)})</span></label>`).join('') +
+      '<div class="row" style="margin-top:8px"><button id="btnReplace" class="primary">Replace ticked files</button></div></div>';
+  }
+  $('#saveTitle').textContent = d.conflicts.length ? 'Saved, with files to review' : 'Saved';
+  lastSaved = { module: d.ref.module, case: d.ref.case, frameworks: projectBody().frameworks };
+  try { localStorage.setItem('vortex.lastSaved', JSON.stringify(lastSaved)); } catch {}
+  html = `<div class="row" style="margin-bottom:8px">${lastSaved.frameworks.map((f) => `<button class="primary" data-runnow="${f}">Run with MobileWright now</button>`).join('')}</div>` + html;
+  $('#saveBody').innerHTML = html;
+  updateGuide();
+  if (!$('#saveDlg').open) $('#saveDlg').showModal();
+  const b = $('#btnReplace');
+  if (b) b.onclick = () => { const pick = [...document.querySelectorAll('[data-repl]:checked')].map((x) => x.dataset.repl); if (!pick.length) return toast('Tick at least one file.'); if (confirm('Replace your edited version of ' + pick.length + ' file(s)? This cannot be undone.')) saveProject(pick); };
+  regenerate();
+}
+try {
+  const f = localStorage.getItem('vortex.framework'); $('#fw').value = f === 'legacy' ? 'legacy' : 'mobilewright';
+  const m = localStorage.getItem('vortex.mode'); if (m) $('#mode').value = m;
+  const t = localStorage.getItem('vortex.target'); if (t) $('#target').value = t;
+  const md = localStorage.getItem('vortex.module'); if (md) $('#tmodule').value = md;
+} catch {}
+for (const [id, key] of [['fw', 'vortex.framework'], ['mode', 'vortex.mode'], ['target', 'vortex.target'], ['tmodule', 'vortex.module']]) {
+  $('#' + id).addEventListener('change', () => { try { localStorage.setItem(key, $('#' + id).value); } catch {} regenerate(); });
+}
 $('#tapStyle').addEventListener('change', () => toast('New tap steps will use this style. Change an existing step in its card.'));
 $('#pkg').addEventListener('change', async () => { await api('/api/config', { pkg: $('#pkg').value }); refresh(); });
 window.addEventListener('resize', () => { if (S) render(); });
 
+// ---------- unsaved recording safety (survives a reload, a disconnected phone or a recorder restart) ----------
+const AUTOSAVE_KEY = 'vortex.recording.v1';
+let restoreOffered = false;
+function autosave(savedToFile) {
+  if (!restoreOffered) return; // do not overwrite an older recording before the user has answered the restore prompt
+  if (!steps.length) return clearAutosave();
+  const data = { steps, assets, name: $('#tname').value, module: $('#tmodule').value, savedAt: new Date().toISOString(), savedToFile: !!savedToFile };
+  try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data)); }
+  catch { try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ ...data, assets: [] })); } catch { /* storage unavailable */ } }
+}
+function clearAutosave() { try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} }
+function offerRestore() {
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null'); } catch {}
+  if (!data || !Array.isArray(data.steps) || !data.steps.length || data.savedToFile) { restoreOffered = true; return; }
+  $('#restoreText').textContent = 'Unsaved recording found: ' + data.steps.length + ' step(s) of "' + (data.name || 'recorded flow') + '" from ' + new Date(data.savedAt).toLocaleString() + '.';
+  $('#restoreBanner').style.display = 'flex';
+  $('#btnRestore').onclick = () => {
+    steps = data.steps; assets = data.assets || []; $('#tname').value = data.name || 'recorded flow'; if (data.module) $('#tmodule').value = data.module;
+    restoreOffered = true; $('#restoreBanner').style.display = 'none'; renderSteps(); regenerate(); toast('Restored ' + steps.length + ' steps.');
+  };
+  $('#btnDiscard').onclick = () => { if (confirm('Discard the unsaved recording?')) { clearAutosave(); restoreOffered = true; $('#restoreBanner').style.display = 'none'; } };
+}
+
+// ---------- shared helpers for the panels ----------
+async function call(path, body) {
+  const r = await fetch(path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data: j };
+}
+document.querySelectorAll('dialog [data-close]').forEach((b) => (b.onclick = () => b.closest('dialog').close()));
+const fmtTime = (iso) => (iso ? new Date(iso).toLocaleString() : '');
+function stepsHtml(steps) {
+  return '<ul class="steps-report">' + steps.map((s) => `<li class="${s.ok ? 'ok' : 'no'}">${s.ok ? '&#10003;' : '&#10007;'} ${esc(s.step)}: <span style="color:var(--txt)">${esc(s.detail)}</span></li>`).join('') + '</ul>';
+}
+
+// ---------- Runs ----------
+let RUN = null;     // { id, next }
+let runTimer = null;
+const fmtMs = (ms) => (ms == null ? '—' : ms < 1000 ? Math.round(ms) + ' ms' : ms < 60000 ? (ms / 1000).toFixed(1) + ' s' : Math.floor(ms / 60000) + ' min ' + Math.round((ms % 60000) / 1000) + ' s');
+async function runsLoad(refreshEnv) {
+  const [mw, proj, tests, runs] = await Promise.all([call('/api/mobilewright/env'), call('/api/project'), call('/api/tests'), call('/api/runs')]);
+  if (mw.ok) {
+    const m = mw.data;
+    $('#mwEnv').className = 'note ' + (m.ok ? '' : 'warn');
+    $('#mwEnv').innerHTML = (m.ok ? `MobileWright: @mobilewright/test ${esc(m.version || '?')} in <code>${esc(m.projectDir)}</code>` + (m.config ? ` · config <code>${esc(m.config.split(/[\\/]/).pop())}</code>` : '')
+      : '<b>MobileWright is not ready:</b> ' + esc(m.problems.join(' ')) + (m.installCommand ? `<br>In your MobileWright project run: <code>${esc(m.installCommand)}</code>` : '')) +
+      (m.simulated ? '<br><span class="warn">Mock mode: MobileWright runs use a simulated device (sample screens). Results say nothing about a real phone.</span>' : '');
+  } else { $('#mwEnv').className = 'note err'; $('#mwEnv').textContent = mw.data.error || 'MobileWright check failed'; }
+  if (proj.ok) {
+    const mods = proj.data.modules;
+    const fwName = { mobilewright: 'MobileWright' };
+    $('#rProject').innerHTML = mods.length ? mods.map((m) => `<div class="mod-hd"><h3>${esc(m.module)}</h3><button data-runmod="${esc(m.module)}" data-engine="mobilewright">Run module: MobileWright</button></div>` +
+      m.cases.map((c) => `<div class="case"><div class="hd"><b>${esc(c.name)}</b><span class="mut">${esc(c.case)} · ${esc(c.mode)}${c.target ? ', runs ' + esc(c.target) : ''} · ${esc(fmtTime(c.updatedAt))}</span><button data-open="${esc(c.module)}/${esc(c.case)}">Open</button></div>` +
+        (c.pendingReview.length ? `<div class="warn">${c.pendingReview.length} file(s) have a newer generated version (.vortex-new) to review.</div>` : '') +
+        c.entries.filter((e) => e.framework === 'mobilewright').map((e) => `<div class="entry"><span class="badge">${esc(fwName[e.framework])} ${esc(e.variant)}</span><span class="f">${esc(e.path)}${e.discoverable ? '' : ' <span class="mut">(not run by default)</span>'}${e.exists ? '' : ' <span class="warn">missing</span>'}</span>` +
+          (e.exists ? `<button class="primary" data-runcase="${esc(c.module)}/${esc(c.case)}" data-engine="${esc(e.framework)}" data-variant="${esc(e.variant)}">Run</button>` : '') + '</div>').join('') + '</div>').join('')).join('')
+      : `<div class="mut">No saved test cases in ${esc(proj.data.outDir)} yet. Record steps, then press "Save to project".</div>`;
+  }
+  if (tests.ok) {
+    $('#rLooseWrap').style.display = tests.data.tests.length ? '' : 'none';
+    $('#rTests').innerHTML = tests.data.tests.map((t) => `<div class="runrow"><span class="f">${esc(t.file)}</span><span class="mut">${esc(fmtTime(t.modified))}</span>` +
+      (t.runnable ? `<button data-run="${esc(t.file)}">Run</button>` : '<span class="mut">npx mobilewright test</span>') + '</div>').join('');
+  }
+  if (runs.ok) {
+    $('#rHistory').innerHTML = runs.data.history.map((h) => `<div class="runrow"><span class="stat ${h.status}">${esc(h.status)}</span><span class="badge">MobileWright</span><span class="f">${esc(h.file)}</span><span class="mut">${esc(h.summary)} · ${esc(fmtTime(h.startedAt))} · ${fmtMs(h.durationMs)}</span></div>`).join('') || '<div class="mut">No runs yet.</div>';
+    if (!RUN && runs.data.active.length) { RUN = { id: runs.data.active[0].id, next: 0 }; $('#rOut').textContent = ''; runPoll(); }
+  }
+}
+function askAutomationSwitch(engine, conflicts, canResolve) {
+  const names = { mobilewright: 'MobileWright' };
+  const dlg = $('#automationDlg');
+  $('#automationTitle').textContent = names[engine] + ' needs the phone';
+  $('#automationBody').innerHTML = conflicts.map((c) => `<div style="margin:5px 0"><b>${esc(c.title)}</b><br>${esc(c.message)}</div>`).join('');
+  $('#automationSwitch').textContent = canResolve ? 'Release device and continue' : 'OK';
+  $('#automationSwitch').classList.toggle('primary', canResolve);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (accepted) => {
+      if (settled) return;
+      settled = true;
+      dlg.close();
+      resolve(accepted);
+    };
+    $('#automationCancel').onclick = () => finish(false);
+    $('#automationClose').onclick = () => finish(false);
+    $('#automationSwitch').onclick = () => finish(canResolve);
+    dlg.oncancel = (e) => { e.preventDefault(); finish(false); };
+    dlg.showModal();
+  });
+}
+async function resolveAutomationSwitch(engine) {
+  const r = await call('/api/automation/resolve', { engine });
+  if (!r.ok) { toast(r.data.error || 'Could not release the device', true); return false; }
+  return true;
+}
+async function ensureAutomationReady(engine) {
+  const released = await call('/api/record/stop', {});
+  if (!released.ok) { toast(released.data.error || 'Could not release recording connection', true); return false; }
+  const status = await call('/api/automation/conflicts?engine=' + encodeURIComponent(engine));
+  if (!status.ok) { toast(status.data.error || 'Could not check device automation', true); return false; }
+  if (!status.data.conflicts || !status.data.conflicts.length) return true;
+  const accepted = await askAutomationSwitch(engine, status.data.conflicts, status.data.canResolve === true);
+  if (!accepted) return false;
+  return resolveAutomationSwitch(engine);
+}
+let RUN_STARTING = false;
+async function startRun(body, resolvedConflict = false) {
+  if (RUN_STARTING && !resolvedConflict) return;
+  if (!resolvedConflict) RUN_STARTING = true;
+  try {
+  const retries = Number($('#rRetries').value) || 0;
+  if (retries > 0 && !body.retrySafe) {
+    if (!confirm('Retries repeat the entire test, including earlier successful steps. Can this test safely run again without duplicate products or other unwanted changes?')) return;
+    body = { ...body, retrySafe: true };
+  }
+  const engine = 'mobilewright';
+  if (!resolvedConflict) {
+    const ready = await ensureAutomationReady(engine);
+    if (!ready) return;
+  }
+  const r = await call('/api/runs', { retries: Number($('#rRetries').value) || 0, ...body, resolveAutomationConflict: resolvedConflict });
+  if (!r.ok) {
+    if (!resolvedConflict && r.data.code === 'AUTOMATION_CONFLICT' && r.data.details && r.data.details.canResolve) {
+      const engine = 'mobilewright';
+      if (await askAutomationSwitch(engine, [{ title: 'Automation changed after the check', message: r.data.error || 'The other automation tool acquired the phone.' }], true) && await resolveAutomationSwitch(engine)) return startRun(body, true);
+      return;
+    }
+    toast((r.data.error || 'Could not start') + (r.data.details && r.data.details.installCommand ? ' Run: ' + r.data.details.installCommand : ''), true); return;
+  }
+  RUN = { id: r.data.id, next: 0 }; $('#rOut').textContent = ''; $('#rResult').innerHTML = ''; runPoll();
+  } finally {
+    if (!resolvedConflict) RUN_STARTING = false;
+  }
+}
+$('#rTests').addEventListener('click', (e) => { const b = e.target.closest('[data-run]'); if (b) startRun({ file: b.dataset.run }); });
+$('#runDlg').addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-runcase]'), m = e.target.closest('[data-runmod]'), a = e.target.closest('[data-runall]'), o = e.target.closest('[data-open]');
+  if (c) { const [module, cs] = c.dataset.runcase.split('/'); return startRun({ engine: c.dataset.engine, scope: 'case', module, case: cs, variant: c.dataset.variant }); }
+  if (m) return startRun({ engine: m.dataset.engine, scope: 'module', module: m.dataset.runmod });
+  if (a) return startRun({ engine: a.dataset.runall, scope: 'all' });
+  if (o) return openCase(...o.dataset.open.split('/'));
+});
+async function openCase(module, cs) {
+  if (steps.length && !confirm('Replace the current ' + steps.length + ' step(s) with the saved recording ' + module + '/' + cs + '?')) return;
+  const r = await call('/api/project/recording?module=' + encodeURIComponent(module) + '&case=' + encodeURIComponent(cs));
+  if (!r.ok) return toast(r.data.error || 'Could not open', true);
+  const d = r.data;
+  steps = d.steps; assets = d.assets || [];
+  $('#tname').value = d.recording.name; $('#tmodule').value = module;
+  if (d.manifest) {
+    $('#fw').value = 'mobilewright';
+    $('#mode').value = d.manifest.mode; if (d.manifest.target) $('#target').value = d.manifest.target;
+  }
+  $('#runDlg').close();
+  renderSteps(); regenerate();
+  toast('Opened ' + module + '/' + cs + (d.recording.migratedFrom !== null ? ' (converted from an older recording format; the file is updated only when you save)' : '') + '.');
+}
+async function runPoll() {
+  clearTimeout(runTimer);
+  if (!RUN) return;
+  $('#rActive').style.display = 'block';
+  const r = await call('/api/runs/' + RUN.id + '?from=' + RUN.next);
+  if (!r.ok) { $('#rStatus').textContent = r.data.error || 'unknown run'; return; }
+  const d = r.data;
+  if (d.output) { const out = $('#rOut'); out.textContent += d.output; out.scrollTop = 1e9; }
+  RUN.next = d.next;
+  $('#rStatus').textContent = d.status; $('#rStatus').className = 'stat ' + d.status;
+  $('#rCancel').disabled = !!d.result;
+  if (d.result) {
+    runResult(d);
+    if (d.retryNext) { toast('Failed: running it again (retry, with its own report).'); RUN = { id: d.retryNext, next: 0 }; $('#rOut').textContent += '\n[vortex] retrying in a new run ' + d.retryNext + '\n'; runTimer = setTimeout(runPoll, 700); return; }
+    if (d.result.status === 'failed' && Number($('#rRetries').value) > 0 && !RUN.waitedRetry) { RUN.waitedRetry = true; runTimer = setTimeout(runPoll, 1200); return; } // the retry may start a moment later
+    RUN = null; runsLoad(); return;
+  }
+  runTimer = setTimeout(runPoll, 700);
+}
+function runResult(d) {
+  const x = d.result;
+  const shots = (x.artifacts || []).filter((a) => a.type === 'screenshot').map((a) => `<a href="/api/runs/${d.id}/artifact?file=${encodeURIComponent(a.file)}" target="_blank"><img src="/api/runs/${d.id}/artifact?file=${encodeURIComponent(a.file)}" alt="screenshot at failure"></a>`).join('');
+  $('#rResult').innerHTML = `<div class="note ${['passed', 'skipped'].includes(x.status) ? '' : 'err'}"><div><span class="stat ${x.status}">${esc(x.status.toUpperCase())}</span> ${esc(x.summary)} <span class="mut">(${fmtMs(x.durationMs)}${x.exitCode !== null ? ', exit code ' + x.exitCode : ''}${x.category ? ', ' + esc(x.category) : ''})</span></div>` +
+    x.failed.map((f) => `<div style="margin-top:6px"><b>${esc(f.test)}</b>${f.step ? ' · failed at step <b>' + esc(f.step) + '</b>' : ''}<br><span class="warn">${esc(f.message)}</span>` + diagHtml(f.diagnosis) + '</div>').join('') +
+    (shots ? `<div class="shots">${shots}</div>` : '') +
+    `<div class="row" style="margin-top:8px"><button data-openrep="${esc(d.id)}">Open report</button><a href="/api/reports/${encodeURIComponent(d.id)}/export.html">Download HTML report</a></div>` +
+    (x.simulated ? '<div class="warn" style="margin-top:6px">Simulated device (mock mode): this result says nothing about a real phone.</div>' : '') +
+    '<details style="margin-top:6px"><summary>Cleanup</summary>' + stepsHtml(x.cleanup) + '</details>' +
+    `<div class="mut" style="margin-top:4px">Report folder: ${esc(d.dir)}</div></div>`;
+}
+function diagHtml(g) {
+  if (!g) return '';
+  return `<div class="diagbox"><b>Likely cause: ${esc(g.title)}</b>${g.expected !== undefined ? `<br>expected <code>${esc(g.expected)}</code>, got <code>${esc(g.actual)}</code>` : ''}<br>${esc(g.hint)}</div>`;
+}
+$('#rResult').addEventListener('click', (e) => { const b = e.target.closest('[data-openrep]'); if (b) openReports(b.dataset.openrep); });
+
+// ---------- Reports (Milestone 5) ----------
+let REPS = [];
+async function openReports(selectId) {
+  if (!$('#repDlg').open) $('#repDlg').showModal();
+  const r = await call('/api/reports');
+  if (!r.ok) { $('#repList').innerHTML = `<div class="note err">${esc(r.data.error || 'Could not load reports')}</div>`; return; }
+  REPS = r.data.reports;
+  $('#repRecovered').innerHTML = r.data.recovered.length ? `<div class="note warn"><b>Cleaned up after ${r.data.recovered.length} run(s) interrupted by a recorder stop:</b>` + r.data.recovered.map((x) => `<div>${esc(x.label)}: ${esc(x.detail.join('; ') || 'nothing left to clean')}</div>`).join('') + '</div>' : '';
+  repList();
+  if (selectId) repShow(selectId);
+}
+function repList() {
+  const fw = $('#repFw').value, st = $('#repSt').value, q = $('#repQ').value.trim().toLowerCase();
+  const list = REPS.filter((h) => (!fw || h.engine === fw) && (!st || h.status === st) && (!q || (h.file + ' ' + (h.device ? h.device.model + ' ' + h.device.serial : '')).toLowerCase().includes(q)));
+  $('#repCount').textContent = list.length + ' run(s)';
+  $('#repList').innerHTML = list.map((h) => `<div class="rr" data-rep="${esc(h.id)}"><span class="stat ${esc(h.status)}">${esc(h.status)}</span> <b>${esc(h.file)}</b> <span class="badge">MobileWright</span><br><span class="mut">${esc(fmtTime(h.startedAt))} · ${fmtMs(h.durationMs)}${h.device ? ' · ' + esc(h.device.model || h.device.serial) + ' Android ' + esc(h.device.androidVersion || '?') : ''}${h.retry ? ' · attempt ' + h.retry.attempt + '/' + h.retry.of : ''}</span></div>`).join('') || '<div class="mut" style="padding:10px">No runs match.</div>';
+}
+async function repShow(id) {
+  document.querySelectorAll('#repList .rr').forEach((x) => x.classList.toggle('on', x.dataset.rep === id));
+  $('#repDetail').innerHTML = 'Loading...';
+  const r = await call('/api/reports/' + encodeURIComponent(id));
+  if (!r.ok) { $('#repDetail').innerHTML = `<div class="note err">${esc(r.data.error)}</div>`; return; }
+  const d = r.data, x = d.result, m = d.meta || {};
+  const f = (name) => '/api/reports/' + encodeURIComponent(id) + '/file?name=' + encodeURIComponent(name);
+  const arts = x.artifacts || [];
+  const t = x.tests || null;
+  const kv = [['Framework', 'MobileWright (TypeScript)'], ['Result', x.status + (x.category ? ' (' + x.category + ')' : '') + ': ' + x.summary],
+    ['Tests', t ? `${t.passed ?? (t.total - (t.failures || 0) - (t.errors || 0) - (t.skipped || 0))} passed, ${t.failed ?? ((t.failures || 0) + (t.errors || 0))} failed, ${t.skipped || 0} skipped` : '—'],
+    ['Device', m.device ? `${m.device.model || '?'} (${m.device.serial}), Android ${m.device.androidVersion || '?'}${m.device.simulated ? ' (simulated)' : ''}` : 'not recorded'],
+    ['App build', m.appPackage ? `${m.appPackage} ${m.appVersion || ''} · ${m.buildType}` : 'not recorded'], ['Started', fmtTime(x.startedAt)], ['Ended', fmtTime(x.endedAt)], ['Duration', fmtMs(x.durationMs)],
+    ['Session startup', x.sessionStartupMs != null ? fmtMs(x.sessionStartupMs) : 'not measured'], ['Retry', m.retry ? `attempt ${m.retry.attempt} of ${m.retry.of}` + (d.retryNext ? ' (retried as ' + d.retryNext + ')' : '') : 'none']];
+  $('#repDetail').innerHTML = `<div class="row" style="margin-bottom:6px"><b style="flex:1">${esc(m.label || x.label || id)}</b><a href="/api/reports/${encodeURIComponent(id)}/export.html">Export HTML</a> · <a href="/api/reports/${encodeURIComponent(id)}/export.json">Export JSON</a></div>` +
+    '<dl class="kv">' + kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + '</dl>' +
+    (x.failed || []).map((ff) => `<div style="margin-top:8px"><b>${esc(ff.test)}</b>${ff.step ? ' · failed at step <b>' + esc(ff.step) + '</b>' : ''}<br><span class="warn">${esc(ff.message)}</span>${diagHtml(ff.diagnosis)}<details><summary>Error details</summary><pre class="log">${esc(ff.details)}</pre></details></div>`).join('') +
+    (arts.some((a) => a.type === 'screenshot' || a.type === 'checkpoint') ? '<div class="shots">' + arts.filter((a) => a.type === 'screenshot' || a.type === 'checkpoint').map((a) => `<a href="${f(a.file)}" target="_blank" title="${esc(a.file)}"><img src="${f(a.file)}" alt="${esc(a.type)}"></a>`).join('') + '</div>' : '') +
+    arts.filter((a) => a.type === 'page-source' || a.type === 'dom').map((a) => `<div><a href="${f(a.file)}" target="_blank">${a.type === 'dom' ? 'WebView DOM at failure' : 'Native hierarchy at failure'} (${esc(a.file)})</a></div>`).join('') +
+    `<details style="margin-top:6px"><summary>Log</summary><pre class="log">${esc(d.log)}</pre></details><div class="mut" style="margin-top:4px">Folder: ${esc(d.dir)}</div>`;
+}
+$('#repList').addEventListener('click', (e) => { const r = e.target.closest('[data-rep]'); if (r) repShow(r.dataset.rep); });
+['repFw', 'repSt'].forEach((id) => $('#' + id).addEventListener('change', repList));
+$('#repQ').addEventListener('input', repList);
+$('#repRefresh').onclick = () => openReports();
+$('#btnReports').onclick = () => openReports();
+$('#rCancel').onclick = async () => { if (!RUN) return; $('#rCancel').disabled = true; await call('/api/runs/' + RUN.id + '/cancel', {}); };
+$('#rRefresh').onclick = () => runsLoad(true);
+$('#btnRuns').onclick = async () => { $('#runDlg').showModal(); await runsLoad(false); };
+
+// ---------- Devices ----------
+async function devLoad() {
+  const r = await call('/api/devices');
+  if (!r.ok) { $('#devList').innerHTML = `<div class="note err">${esc(r.data.error || 'Could not list devices')}</div>`; return null; }
+  const { devices, current } = r.data;
+  $('#devList').innerHTML = devices.length ? '<table class="devs"><thead><tr><th>Serial</th><th>State</th><th>Connection</th><th>Model</th><th></th></tr></thead><tbody>' +
+    devices.map((d) => `<tr><td>${esc(d.serial)}${d.serial === current ? ' <span class="badge good">recording</span>' : ''}</td><td>${d.state === 'device' ? '<span class="badge good">ready</span>' : `<span class="badge warn">${esc(d.state)}</span>`}</td><td>${esc(d.transport)}</td><td>${esc(d.model || '')}</td><td>${d.state === 'device' ? `<button data-dev="${esc(d.serial)}">Details</button>` : ''}</td></tr>`).join('') +
+    '</tbody></table><p class="mut" style="margin:6px 0 0">To record on a different device, restart the recorder with <code>--device &lt;serial&gt;</code>.</p>'
+    : '<div class="note warn">No devices found. Check the cable, USB debugging and <code>adb devices</code>.</div>';
+  return r.data;
+}
+$('#devList').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-dev]'); if (!b) return;
+  $('#devDetails').innerHTML = 'Reading device...';
+  const r = await call('/api/devices/details?serial=' + encodeURIComponent(b.dataset.dev));
+  if (!r.ok) { $('#devDetails').innerHTML = `<div class="note err">${esc(r.data.error)}</div>`; return; }
+  const d = r.data;
+  const scr = d.screen ? `${d.screen.width} x ${d.screen.height}${d.screen.overridden ? ' (override)' : ''}` : 'unknown';
+  const den = d.density ? `${d.density.dpi} dpi${d.density.overridden ? ' (override)' : ''}` : 'unknown';
+  $('#devDetails').innerHTML = '<div class="note"><dl class="kv">' +
+    `<dt>Device</dt><dd>${esc([d.manufacturer, d.model].filter(Boolean).join(' '))} (${esc(d.serial)})</dd>` +
+    `<dt>Android</dt><dd>${esc(d.androidVersion || '?')} (API ${d.sdk ?? '?'})</dd>` +
+    `<dt>Type</dt><dd>${d.serial === 'mock-device' ? 'Simulated device (--mock, screens from samples/)' : (d.isEmulator ? 'Emulator' : 'Physical device') + ' via ' + esc(d.transport)}</dd>` +
+    `<dt>Screen</dt><dd>${esc(scr)}, ${esc(den)}</dd>` +
+    `<dt>Primary CPU ABI</dt><dd><b>${esc(d.primaryAbi || 'unknown')}</b></dd>` +
+    `<dt>Supported ABIs</dt><dd>${esc(d.abis.join(', ') || 'unknown')} <span class="mut">(${esc(d.abiFamily)})</span></dd>` +
+    '</dl></div>';
+});
+$('#btnDevices').onclick = async () => { $('#devDlg').showModal(); $('#devDetails').innerHTML = ''; await devLoad(); };
+$('#devRefresh').onclick = () => devLoad();
+
+// Disconnected-phone banner. Recorded steps stay in memory and in this browser while the phone is away.
+let devMock = false;
+async function devWatch() {
+  if (devMock || document.hidden) return;
+  const r = await call('/api/devices').catch(() => null);
+  const ban = $('#discBanner');
+  if (r && r.ok && r.data.current && r.data.currentConnected === false) {
+    ban.textContent = `Phone ${r.data.current} is disconnected. Your ${steps.length} recorded step(s) are kept (also saved in this browser). Reconnect it, then press Refresh screen.`;
+    ban.style.display = 'flex';
+  } else ban.style.display = 'none';
+}
+setInterval(devWatch, 5000);
+
+
+// ---------- simple flow: guide bar, tools menu, keyboard, setup check, benchmarks, help (Milestone 6) ----------
+let lastSaved = null;
+let savedSig = null;
+try { lastSaved = JSON.parse(localStorage.getItem('vortex.lastSaved') || 'null'); if (lastSaved) lastSaved.frameworks = ['mobilewright']; } catch { lastSaved = null; }
+let setupState = null;
+function updateGuide() {
+  if (!$('#g1')) return;
+  const g = (id, cls, text) => { $(id).className = 'gstep ' + cls; $(id + 't').textContent = text; };
+  const srv = 'MobileWright';
+  if (S) g('#g1', 'done', `Phone ${S.device || ''}${devMock ? ' (simulated)' : ''} · ${srv}`);
+  else if (setupState && !setupState.ready.record && !devMock) g('#g1', 'bad', 'Something is missing: open the setup check');
+  else g('#g1', 'now', 'Connect the phone (USB debugging on), then press Refresh');
+  const modeName = (MODES.find(([k]) => k === mode) || [])[1] || mode;
+  g('#g2', !S ? '' : steps.length ? 'done' : 'now', steps.length ? `${steps.length} step(s) · next click: ${modeName}` : `Click the phone screen · next click: ${modeName}`);
+  const sig = JSON.stringify(stepPayload());
+  const saved = lastSaved && savedSig === sig;
+  if (!steps.length) g('#g3', '', lastSaved ? `Last saved: ${lastSaved.module}/${lastSaved.case}` : 'Record some steps first');
+  else if (saved) g('#g3', 'done', `Saved: ${lastSaved.module}/${lastSaved.case} · press Run`);
+  else g('#g3', 'now', `Not saved yet · ${$('#tmodule').value || 'general'}/${$('#tname').value || 'recorded flow'}`);
+  $('#g3run').disabled = !lastSaved;
+  $('#g3save').disabled = !steps.length;
+}
+async function runNow(engine) {
+  if (!lastSaved) return toast('Save the test first.', true);
+  if ($('#saveDlg').open) $('#saveDlg').close();
+  $('#runDlg').showModal();
+  await runsLoad(false);
+  startRun({ engine, scope: 'case', module: lastSaved.module, case: lastSaved.case });
+}
+$('#saveBody').addEventListener('click', (e) => { const b = e.target.closest('[data-runnow]'); if (b) runNow(b.dataset.runnow); });
+$('#g1b').onclick = () => openSetup();
+$('#g2b').onclick = () => refresh();
+$('#g3save').onclick = () => $('#btnSave').click();
+$('#g3run').onclick = (ev) => {
+  if (!lastSaved) return;
+  const fws = ['mobilewright'];
+  if (fws.length === 1) return runNow(fws[0]);
+  popMenu(ev, `Run ${lastSaved.module}/${lastSaved.case}`, fws.map((f) => [`with MobileWright`, () => runNow(f)]));
+};
+['#tname', '#tmodule'].forEach((x) => $(x).addEventListener('input', () => updateGuide()));
+// remember what was saved, so the guide can say "not saved yet" after any change
+const _origSaveProject = saveProject;
+saveProject = async function (replace) { await _origSaveProject(replace); if ($('#saveDlg').open) savedSig = JSON.stringify(stepPayload()); updateGuide(); };
+
+$('#btnTools').onclick = (ev) => popMenu(ev, 'Tools', [
+  ['Inspect controls...', () => $('#btnInspector').click()],
+  ['Devices...', () => $('#btnDevices').click()],
+  ['Benchmarks...', () => openBench()],
+  ['Setup check...', () => openSetup()],
+  ['Save debug snapshot', () => $('#btnDebug').click()],
+  ['Keyboard shortcuts', () => openHelp()],
+]);
+
+// ---- keyboard ----
+const KEYS = [
+  ['T Y A W S O', 'Tap, Type, Assert, Wait for, Swipe, Scroll to'], ['L D C I', 'Long-press, Double-tap, Clear text, Inspect'],
+  ['R', 'Refresh the phone screen'], ['B / H', 'Phone Back / Home'], ['Ctrl+Z', 'Undo the last step'], ['Ctrl+S', 'Save to project'], ['?', 'This help'], ['Esc', 'Close a menu or dialog'],
+];
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t && (t.closest('input, textarea, select, [contenteditable]'))) return;
+  if (document.querySelector('dialog[open]')) return;
+  if (e.key === 'Escape') { $('#menu').style.display = 'none'; return; }
+  if (busy) return;
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+    if (k === 's') { e.preventDefault(); $('#btnSave').click(); }
+    else if (k === 'z' && steps.length) { e.preventDefault(); $('#btnUndo').click(); }
+    return;
+  }
+  if (e.altKey) return;
+  if (e.key === '?') return openHelp();
+  const m = Object.entries(MODE_KEYS).find(([, v]) => v === k);
+  if (m) return setMode(m[0]);
+  if (k === 'r') refresh(); else if (k === 'b') $('#btnBack').click(); else if (k === 'h') $('#btnHome').click();
+});
+function openHelp() {
+  $('#keysTable').innerHTML = KEYS.map(([k, d]) => `<tr><td style="white-space:nowrap">${k.split(' ').map((x) => `<kbd>${esc(x)}</kbd>`).join(' ')}</td><td>${esc(d)}</td></tr>`).join('');
+  $('#helpDlg').showModal();
+}
+$('#btnHelp').onclick = () => openHelp();
+
+// ---- setup check ----
+const fixHtml = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+async function setupLoad() {
+  $('#setupList').innerHTML = '<tr><td>Checking...</td></tr>';
+  const r = await call('/api/setup');
+  if (!r.ok) { $('#setupList').innerHTML = `<tr><td class="no">${esc(r.data.error || 'Setup check failed')}</td></tr>`; return null; }
+  setupState = r.data;
+  const yes = (b) => (b ? '<span class="ok">yes</span>' : '<span class="no">no</span>');
+  $('#setupReady').innerHTML = `Ready for: recording ${yes(r.data.ready.record || r.data.mock)} · MobileWright runs ${yes(r.data.ready.mobilewright)}` +
+    (r.data.mock ? '<div class="mut">Mock mode: the phone is simulated from samples/, so phone and adb checks do not matter here.</div>' : '');
+  $('#setupList').innerHTML = r.data.checks.map((c) => `<tr><td><span class="st ${c.status}">${c.status === 'ok' ? 'OK' : c.status === 'missing' ? 'MISSING' : c.status.toUpperCase()}</span></td><td><b>${esc(c.name)}</b> <span class="mut">${c.needed ? '· needed for ' + esc(c.needed) : ''}</span><div>${esc(c.detail)}</div>${c.fix && c.status !== 'ok' ? `<div class="fix">${fixHtml(c.fix)}</div>` : ''}</td></tr>`).join('');
+  updateGuide();
+  return r.data;
+}
+function openSetup() { $('#setupDlg').showModal(); setupLoad(); }
+$('#setupRe').onclick = () => setupLoad();
+
+// ---- benchmarks ----
+let BENCH = null;
+const BENCH_STATUS = { running: 'running', done: 'done', failed: 'failed', cancelled: 'cancelled', interrupted: 'interrupted' };
+async function openBench() {
+  $('#benchDlg').showModal();
+  const r = await call('/api/project');
+  const cases = r.ok ? r.data.modules.flatMap((m) => m.cases.map((c) => ({ id: c.module + '/' + c.case, fws: c.frameworks, plain: c.entries.filter((e) => e.variant === 'plain' && e.exists).map((e) => e.framework) }))) : [];
+  $('#bCase').innerHTML = cases.map((c) => `<option value="${esc(c.id)}"${lastSaved && c.id === lastSaved.module + '/' + lastSaved.case ? ' selected' : ''}>${esc(c.id)}${c.plain.length ? '' : ' (no Plain test saved)'}</option>`).join('') || '<option value="">No saved test cases yet</option>';
+  $('#bStart').disabled = !cases.length;
+  benchHist();
+  const l = await call('/api/bench');
+  if (l.ok && l.data.active) benchPoll(l.data.active);
+}
+async function benchHist() {
+  const l = await call('/api/bench');
+  if (!l.ok) { $('#bHist').innerHTML = `<div class="note err">${esc(l.data.error || 'unavailable')}</div>`; return; }
+  $('#bHist').innerHTML = l.data.benchmarks.map((b) => `<div class="runrow"><span class="stat ${b.status === 'done' ? 'passed' : b.status === 'running' ? 'running' : 'failed'}">${esc(BENCH_STATUS[b.status] || b.status)}</span><span class="f">${esc(b.case)} · ${esc(b.frameworks.join(' + '))} · ${b.iterations} run(s) · ${esc(b.buildType)} build${b.simulated ? ' · simulated' : ''}</span><span class="mut">${esc(fmtTime(b.startedAt))}</span><button data-bshow="${esc(b.id)}">Open</button></div>`).join('') || '<div class="mut">None yet.</div>';
+}
+$('#bHist').addEventListener('click', (e) => { const b = e.target.closest('[data-bshow]'); if (b) benchShow(b.dataset.bshow); });
+function benchShow(id) {
+  $('#bResult').innerHTML = `<div class="row" style="margin:6px 0"><b style="flex:1">Benchmark ${esc(id)}</b><a href="/api/bench/${encodeURIComponent(id)}/export.html">Export HTML</a> · <a href="/api/bench/${encodeURIComponent(id)}/export.json">Export JSON</a></div><iframe id="benchFrame" title="Benchmark report" src="/api/bench/${encodeURIComponent(id)}/export.html?inline=1"></iframe>`;
+}
+async function benchPoll(id) {
+  BENCH = id;
+  $('#bStart').disabled = true; $('#bCancel').style.display = ''; $('#bProgWrap').style.display = '';
+  for (;;) {
+    const r = await call('/api/bench/' + encodeURIComponent(id));
+    if (!r.ok) { $('#bMsg').textContent = r.data.error || 'error'; break; }
+    const d = r.data;
+    $('#bProg').style.width = Math.round((100 * d.progress.done) / Math.max(1, d.progress.total)) + '%';
+    $('#bMsg').textContent = d.status === 'running' ? `${d.progress.done}/${d.progress.total} runs · ${d.progress.current}` : `Benchmark ${d.status}${d.error ? ': ' + d.error : ''}`;
+    if (d.status !== 'running') break;
+    await new Promise((x) => setTimeout(x, 800));
+    if (!$('#benchDlg').open) { BENCH = null; break; }
+  }
+  $('#bStart').disabled = false; $('#bCancel').style.display = 'none'; $('#bProgWrap').style.display = 'none';
+  if (BENCH === id) benchShow(id);
+  BENCH = null;
+  benchHist();
+}
+let BENCH_STARTING = false;
+$('#bStart').onclick = async () => {
+  if (BENCH_STARTING) return;
+  BENCH_STARTING = true;
+  $('#bStart').disabled = true;
+  const originalLabel = $('#bStart').textContent;
+  $('#bStart').textContent = 'Checking device…';
+  try {
+  const [module, cs] = String($('#bCase').value).split('/');
+  const fws = ['mobilewright'];
+  if (!fws.length) { toast('Choose at least one framework.', true); return; }
+  for (const engine of fws) if (!await ensureAutomationReady(engine)) return;
+  $('#bResult').innerHTML = '';
+  const r = await call('/api/bench', { module, case: cs, frameworks: fws, iterations: Number($('#bRuns').value), warmup: Number($('#bWarm').value), probes: false, resetApp: $('#bReset').checked, coldStart: false });
+  if (!r.ok) { toast(r.data.error || 'Could not start the benchmark', true); return; }
+  $('#bStart').textContent = originalLabel;
+  benchPoll(r.data.id);
+  } finally {
+    BENCH_STARTING = false;
+    $('#bStart').textContent = originalLabel;
+    if (!BENCH) $('#bStart').disabled = false;
+  }
+};
+$('#bCancel').onclick = async () => { if (BENCH) await call('/api/bench/' + encodeURIComponent(BENCH) + '/cancel', {}); };
+
 // ---------- start ----------
 (async function init() {
+  offerRestore();
   buildToolbar(); renderSteps(); regenerate();
-  try { const c = await api('/api/config'); $('#pkg').value = c.pkg; if (c.mock) $('#devBadge').textContent = 'mock device'; } catch {}
+  try { const c = await api('/api/config'); $('#pkg').value = c.pkg; if (c.mock) { $('#devBadge').textContent = 'mock device'; devMock = true; } } catch {}
+  updateGuide();
   refresh();
+  // First visit on a real setup: show what is missing once (afterwards it is one click away in the guide bar).
+  setupLoad().then((d) => {
+    let seen = false; try { seen = !!localStorage.getItem('vortex.setupSeen'); } catch {}
+    if (d && !d.mock && !(d.ready.record && d.ready.mobilewright) && !seen) { try { localStorage.setItem('vortex.setupSeen', '1'); } catch {} openSetup(); }
+  });
 })();
 </script>
 </body>

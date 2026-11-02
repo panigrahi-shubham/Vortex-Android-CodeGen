@@ -7,7 +7,7 @@ const KEYCODES = { BACK: 4, HOME: 3, ENTER: 66, APP_SWITCH: 187, RECENT: 187, DE
 
 function run(file, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { encoding: 'buffer', maxBuffer: 128 * 1024 * 1024, windowsHide: true, ...opts }, (err, stdout, stderr) => {
+    execFile(file, args, { encoding: 'buffer', timeout: 15000, maxBuffer: 128 * 1024 * 1024, windowsHide: true, ...opts }, (err, stdout, stderr) => {
       if (err) {
         const msg = (stderr && stderr.toString().trim()) || err.message;
         reject(new Error(`${file} ${args.join(' ')} failed: ${msg}`));
@@ -18,7 +18,7 @@ function run(file, args, opts = {}) {
 
 function sh(cmd) {
   return new Promise((resolve, reject) => {
-    exec(cmd, { encoding: 'buffer', maxBuffer: 128 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+    exec(cmd, { encoding: 'buffer', timeout: 15000, maxBuffer: 128 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
       if (err) reject(new Error(`${cmd} failed: ${(stderr && stderr.toString().trim()) || err.message}`));
       else resolve(stdout);
     });
@@ -52,7 +52,7 @@ export async function dumpUiautomator(adbRun, sleepFn = (ms) => new Promise((r) 
   throw new Error(`uiautomator dump did not return a screen after ${tries} tries: "${snippet}". Close other automation tools (a running test, Appium, the MobileWright Inspector) and press Refresh.`);
 }
 
-export async function createRealDevice({ serial, treeCmd = 'mobilecli dump ui', treeSource = 'auto', log = console.log } = {}) {
+export async function createRealDevice({ serial, treeCmd = 'mobilecli dump ui', treeSource = 'auto', mobilecli = null, log = console.log } = {}) {
   if (!serial) {
     const out = (await run('adb', ['devices'])).toString();
     const devs = out.split(/\r?\n/).slice(1).map((l) => l.trim().split(/\s+/)).filter((p) => p[1] === 'device').map((p) => p[0]);
@@ -82,14 +82,27 @@ export async function createRealDevice({ serial, treeCmd = 'mobilecli dump ui', 
       exclusive(async () => {
         if (useMobilecli) {
           try {
-            const nodes = parseTree(await sh(treeCmd));
+            const raw = mobilecli && treeCmd === 'mobilecli dump ui'
+              ? await run(process.execPath, [mobilecli, 'dump', 'ui', '--device', serial])
+              : await sh(treeCmd);
+            const nodes = parseTree(raw);
             if (nodes.length) {
               source = 'mobilecli';
               return nodes;
             }
             throw new Error('empty tree');
           } catch (e) {
-            if (treeSource === 'mobilecli') throw e;
+            // An installed Mobilecli can already own Android UiAutomation after
+            // a failed request. Starting a second instrumentation would kill it.
+            if (treeSource === 'mobilecli' || mobilecli) {
+              if (/no XML|uiautomation|instrumentation|killed/i.test(e.message)) {
+                const processes = (await adb(['shell', 'dumpsys', 'activity', 'processes']).catch(() => Buffer.from(''))).toString();
+                if (/mClass=ComponentInfo\{dev\.mobile\.maestro\.test\//.test(processes)) {
+                  throw Object.assign(new Error('Maestro is controlling this phone. Disconnect its device session or close Maestro Studio, then Refresh in Vortex. Android cannot share this automation connection.'), {httpStatus:409, code:'EXTERNAL_AUTOMATION_BUSY'});
+                }
+              }
+              throw e;
+            }
             useMobilecli = false;
             log(`[tree] "${treeCmd}" failed (${e.message.split('\n')[0]}). Using adb uiautomator dump instead.`);
           }
@@ -106,16 +119,67 @@ export async function createRealDevice({ serial, treeCmd = 'mobilecli dump ui', 
     longpress: (x, y, ms = 900) => adb(['shell', 'input', 'swipe', String(x), String(y), String(x), String(y), String(ms)]),
     swipe: (x1, y1, x2, y2, ms = 350) => adb(['shell', 'input', 'swipe', ...[x1, y1, x2, y2, ms].map(String)]),
     text: (s) => adb(['shell', 'input', 'text', escapeInputText(s)]),
+    async replaceText(x, y) {
+      await dev.tap(x, y);
+      // Select all in the focused editor, then delete; independent of text length.
+      await adb(['shell', 'input', 'keycombination', '113', '29']); // CTRL+A
+      await adb(['shell', 'input', 'keyevent', '67']);
+    },
     key(k) {
       const code = KEYCODES[String(k).toUpperCase()];
       if (!code) throw new Error('unknown key ' + k);
       return adb(['shell', 'input', 'keyevent', String(code)]);
     },
+    // Milestone 5 interactions. Every argument is validated before it reaches the device shell.
+    async clearText(x, y, length) {
+      await dev.tap(x, y);
+      await adb(['shell', 'input', 'keyevent', 'KEYCODE_MOVE_END']);
+      const n = Math.min(Math.max(Number(length) || 0, 0) + 2, 500);
+      if (n) await adb(['shell', 'input', 'keyevent', ...Array(n).fill('67')]);
+    },
+    async hideKeyboard() {
+      const out = (await adb(['shell', 'dumpsys', 'input_method'])).toString();
+      if (/mInputShown=true/.test(out)) await adb(['shell', 'input', 'keyevent', '4']);
+    },
+    launchApp: (pkg) => adb(['shell', 'monkey', '-p', assertPackage(pkg), '-c', 'android.intent.category.LAUNCHER', '1']),
+    closeApp: (pkg) => adb(['shell', 'am', 'force-stop', assertPackage(pkg)]),
+    openUrl: (url, pkg) => adb(['shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', `'${assertDeepLink(url)}'`, assertPackage(pkg)]),
+    // Foreground activity ("package/.Activity"), used to name pages. null when it cannot be read.
+    async activity() {
+      try {
+        return parseResumedActivity((await adb(['shell', 'dumpsys', 'activity', 'activities'])).toString());
+      } catch {
+        return null;
+      }
+    },
   };
   return dev;
 }
 
-// A tiny fake phone with two screens, so the recorder UI can be tried (and tested) without a device.
+export function assertPackage(pkg) {
+  if (!/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(String(pkg))) throw new Error(`invalid package name "${pkg}"`);
+  return String(pkg);
+}
+
+// A deep link goes through the device shell, so only plain URLs are accepted (no quotes, spaces or shell characters).
+export function assertDeepLink(url) {
+  const u = String(url);
+  if (!/^[A-Za-z][A-Za-z0-9+.-]*:[^\s'"`$\\;&|<>()]*$/.test(u) || u.length > 2000) throw new Error('invalid deep link: use a plain URL such as myapp://orders/42');
+  return u;
+}
+
+// Reads the resumed (foreground) activity from `dumpsys activity activities` output (Android 8 to 15 formats).
+export function parseResumedActivity(out) {
+  const m =
+    /\b(?:topResumedActivity|mResumedActivity|ResumedActivity)\s*[:=]\s*ActivityRecord\{[^}]*?\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)/.exec(out) ||
+    /\bmFocusedActivity\s*[:=]\s*ActivityRecord\{[^}]*?\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)/.exec(out);
+  if (!m) return null;
+  const pkg = m[1];
+  const cls = m[2].startsWith('.') ? pkg + m[2] : m[2];
+  return `${pkg}/${cls.startsWith(pkg + '.') ? cls.slice(pkg.length) : cls}`;
+}
+
+// A tiny fake phone with three screens (home, products, a WebView screen), so the recorder UI can be tried (and tested) without a device.
 export function createMockDevice(samplesDir) {
   let screen = 'home';
   const read = (f) => fs.readFileSync(path.join(samplesDir, f));
@@ -139,7 +203,8 @@ export function createMockDevice(samplesDir) {
         .sort((a, b) => b.depth - a.depth);
       const ids = hit.map((n) => n.identifier);
       if (ids.some((i) => i.endsWith('home_my_products_button'))) screen = 'products';
-      else if (ids.some((i) => i.endsWith(':id/nav_home'))) screen = 'home';
+      else if (ids.some((i) => i.endsWith('home_market_card'))) screen = 'insights';
+      else if (ids.some((i) => i.endsWith(':id/nav_home') || i.endsWith('insights_back_button'))) screen = 'home';
     },
     async doubletap(x, y) {
       await dev.tap(x, y);
@@ -147,8 +212,25 @@ export function createMockDevice(samplesDir) {
     async longpress() {},
     async swipe() {},
     async text() {},
+    async replaceText() {},
     async key(k) {
       if (String(k).toUpperCase() === 'BACK') screen = 'home';
+    },
+    async clearText() {},
+    async hideKeyboard() {},
+    async launchApp() {
+      screen = 'home';
+    },
+    async closeApp() {
+      screen = 'home';
+    },
+    async openUrl(url) {
+      assertDeepLink(url);
+      screen = /^tradehub:\/\/products\b/.test(url) ? 'products' : /^tradehub:\/\/insights\b/.test(url) ? 'insights' : 'home';
+    },
+    // Synthetic activity names for the sample screens (the samples carry no activity information).
+    async activity() {
+      return { home: 'com.yourname.tradehub/.ui.HomeActivity', products: 'com.yourname.tradehub/.ui.products.MyProductsActivity', insights: 'com.yourname.tradehub/.ui.insights.MarketInsightsActivity' }[screen];
     },
   };
   return dev;

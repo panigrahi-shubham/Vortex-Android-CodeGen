@@ -1,0 +1,15 @@
+node_modules/
+generated/
+.vortex/
+*.log
+dist/
+vortex.config.cmd
+.vortex-bench/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+coverage/
+test-results/
+playwright-report/
