@@ -248,10 +248,11 @@ export async function createVortex(o: VortexOptions) {
   }
 
   /** Entry files to run for a case, module or the whole project. */
-  function runTargets(outDir: string, engine: Framework, body: Record<string, unknown>): { files: string[]; reportDir: string; label: string } {
+  function runTargets(outDir: string, engine: Framework, body: Record<string, unknown>): { files: string[]; reportDir: string; label: string; appPackage: string } {
     const scope = String(body.scope ?? 'case');
     const { modules } = listProject(outDir);
     const pick = (c: (typeof modules)[number]['cases'][number]) => {
+      if(c.pendingReview.length)throw new RunError('PENDING_REVIEW',409,`${c.module}/${c.case} has edited output awaiting .vortex-new review. Resolve it before replay.`);
       const mine = c.entries.filter((e) => e.framework === engine && e.exists);
       const v = body.variant === 'plain' || body.variant === 'pom' ? body.variant : null;
       return (v ? mine.filter((e) => e.variant === v) : mine.filter((e) => e.discoverable)).map((e) => path.join(c.module, c.case, e.path));
@@ -262,13 +263,17 @@ export async function createVortex(o: VortexOptions) {
       if (!c) throw new RunError('NOT_SAVED', 404, `No saved case ${ref.module}/${ref.case}.`);
       const files = pick(c);
       if (!files.length) throw new RunError('NO_TESTS', 404, `${ref.module}/${ref.case} has no saved MobileWright test${body.variant ? ` (${String(body.variant)})` : ''}. Save it with that framework selected.`);
-      return { files, reportDir: path.join(caseDir(outDir, ref), 'reports'), label: `${ref.module}/${ref.case}${body.variant ? ` (${String(body.variant)})` : ''}` };
+      const appPackage=readCaseRecording(outDir,ref).recording.app.package;assertPackage(appPackage);
+      return { files, reportDir: path.join(caseDir(outDir, ref), 'reports'), appPackage, label: `${ref.module}/${ref.case}${body.variant ? ` (${String(body.variant)})` : ''}` };
     }
     const mods = scope === 'module' ? modules.filter((m) => m.module === String(body.module ?? '')) : scope === 'all' ? modules : [];
     if (scope !== 'module' && scope !== 'all') throw new RunError('BAD_SCOPE', 400, 'scope must be case, module or all.');
     const files = mods.flatMap((m) => m.cases.flatMap(pick));
     if (!files.length) throw new RunError('NO_TESTS', 404, `Nothing to run: no saved MobileWright tests in ${scope === 'module' ? `module "${String(body.module)}"` : 'the project'}.`);
-    return { files, reportDir: path.join(outDir, '.vortex-reports'), label: scope === 'module' ? `module ${String(body.module)}` : 'all tests' };
+    const packages=new Set(mods.flatMap(m=>m.cases.filter(c=>pick(c).length).map(c=>readCaseRecording(outDir,{module:c.module,case:c.case}).recording.app.package)));
+    if(packages.size!==1)throw new RunError('MIXED_APP_BATCH',409,'Run cases for one app package at a time. This batch contains different app targets.');
+    const appPackage=[...packages][0];assertPackage(appPackage);
+    return { files, reportDir: path.join(outDir, '.vortex-reports'), appPackage, label: scope === 'module' ? `module ${String(body.module)}` : 'all tests' };
   }
 
   function listTests(outDir: string) {
@@ -447,7 +452,7 @@ export async function createVortex(o: VortexOptions) {
         const allowAutomationSwitch = bool('resolveAutomationConflict');
         {
           const t = runTargets(ctx.outDir(), engine, body);
-          out = await startTracked(engine, { testsDir: ctx.outDir(), files: t.files, serial: ctx.serial(), appPackage: ctx.pkg(), timeoutMs, reportDir: t.reportDir, label: t.label, allowAutomationSwitch }, retries);
+          out = await startTracked(engine, { testsDir: ctx.outDir(), files: t.files, serial: ctx.serial(), appPackage: t.appPackage, timeoutMs, reportDir: t.reportDir, label: t.label, allowAutomationSwitch }, retries);
         }
       } else if (!POST && p === '/api/runs') {
         out = {

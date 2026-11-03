@@ -85,7 +85,7 @@ export function buildCase(rec: Recording, ref: CaseRef, o: BuildOptions): { file
   for (const fw of o.frameworks) {
     if (fw !== 'mobilewright') throw new ProjectError('UNSUPPORTED_FRAMEWORK', 400, 'Only MobileWright generation is supported.');
     for (const v of variants) {
-      const r = (v === 'plain' ? generateMobilewrightPlain : generateMobilewrightPom)(rec, { caseSlug: ref.case, size: o.size });
+      const r = (v === 'plain' ? generateMobilewrightPlain : generateMobilewrightPom)(rec, { caseSlug: ref.case, size: o.size ?? rec.device.screen });
       issues.push(...r.issues);
       files.push(...r.files);
     }

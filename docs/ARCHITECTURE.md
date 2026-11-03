@@ -26,6 +26,16 @@ generated/<module>/<case> stores recording.json, vortex-manifest.json, TypeScrip
 
 .vortex stores runtime state, journals and run indexes. Interrupted MobileWright work is recovered only when its recorder is no longer alive; process cleanup requires matching PID, start time and command line. Old foreign-engine journals are left alone. Types retain legacy engine names for reading old data, without loading a runtime for them.
 
+## v1 recording and replay protections
+
+`public/recording-tools.js` provides pure recording edits, overlap ambiguity detection and structural assertion review. The UI uses a module script so these rules are shared with tests. Edits affect generated code, never the phone. Suggestions are initially unchecked.
+
+`src/draft-store.js` persists one versioned draft per recorder state directory with atomic replacement and optimistic revision checks. Browser storage remains a fallback. Drafts include the package and device identity; recovery never silently substitutes a phone. Sensitive typed values are stripped before persistence. Draft operations use their own serialized queue and do not acquire a device lease.
+
+Fast action observation captures once after a short 150 ms delay. Stable observation retains bounded consecutive-tree polling and reports whether a match was reached. Action, capture and total elapsed times are exposed separately. A failed manual refresh invalidates previous screen tokens as well as a failed post-action observation.
+
+Plain/POM coordinate paths verify the recorded PNG dimensions before sending a coordinate action. Locator fallback never catches a delivered tap error to send a second tap. These geometry checks do not identify the app page; explicit result assertions remain necessary. Case runs bind metadata to the saved package; multi-app batches and pending generated-file conflicts are rejected.
+
 ## Testing boundaries
 
 Unit/safety tests cover locators, generation, saving, leases, mapping, request guards and process identity. Integration tests use the real installed runner with a simulated device driver; the WebView fixture uses headless Chromium. The real StockPilot smoke checks current-page input visibility and is explicitly read-only.

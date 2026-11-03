@@ -14,6 +14,7 @@ export interface TreeNode {
   selected: boolean;
   checked: boolean | null;
   enabled: boolean;
+  visible?: boolean;
   target?: unknown;
 }
 export function parseTree(raw: Buffer | string): TreeNode[];

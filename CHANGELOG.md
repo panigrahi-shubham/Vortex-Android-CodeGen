@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.0-rc.1 — 2026-11-03
+
+MobileWright v1 feature release candidate. Stable acceptance on physical devices remains pending.
+
+- Added recording edits, move/duplicate controls, and insertion of explicit before/after assertions.
+- Added overlapping-control selection and filtering of explicitly invisible pointer targets.
+- Made suggested assertions opt-in and added structural coordinate/locator review.
+- Added browser/server draft recovery with app/device metadata, secret stripping and stale-tab conflict protection.
+- Added Fast/Stable capture policies and measured action/capture/total timings.
+- Prevented coordinate fallback after a delivered locator-tap error; Plain/POM coordinate actions verify recorded screen dimensions.
+- Avoided duplicate startup launch and duplicate successful final close in Plain/POM, retaining cleanup on failure.
+- Bound replay metadata to saved app packages and rejected mixed-app batches and unresolved edited-output conflicts.
+- Added unit, API and full browser recording/edit/recovery/save/replay coverage. These checks use simulated devices and the real MobileWright runner.
+
 ## 0.8.0-beta.1 — 2026-11-02
 
 MobileWright-only beta for supervised recording and replay. This is a prerelease, not the stable v1.0 acceptance milestone.

@@ -30,9 +30,10 @@ test('new interactions in both MobileWright generators; unsupported ones are val
   const mw = generateMobilewrightPlain(actionSampleRecording(), { caseSlug: 'more', size: SIZE });
   assert.deepEqual(mw.issues, []);
   const t = mw.files[0].content;
-  for (const line of ["await device.openUrl('tradehub://products');", "await test.info().attach('checkpoint-products', { body: await screen.screenshot(), contentType: 'image/png' });", "await screen.getByTestId(id('home_search_input')).clear();", "await expect(screen.getByTestId(id('home_search_input'))).toBeEnabled();", 'await device.terminateApp(bundleId);\n    // 8. Launch the app\n    await device.launchApp(bundleId);']) {
+  for (const line of ["await device.openUrl('tradehub://products');", "await test.info().attach('checkpoint-products', { body: await screen.screenshot(), contentType: 'image/png' });", "await screen.getByTestId(id('home_search_input')).clear();", "await expect(screen.getByTestId(id('home_search_input'))).toBeEnabled();"]) {
     assert.ok(t.includes(line), line);
   }
+  assert.match(t,/await device\.terminateApp\(bundleId\);[\s\S]*?\/\/ 8\. Launch the app\s+await device\.launchApp\(bundleId\);/);
   assert.deepEqual(generateMobilewrightPom(actionSampleRecording(), { caseSlug: 'more', size: SIZE }).issues, []);
   const full = actionSampleRecording({ appiumOnly: true });
   const bad = generateMobilewrightPlain(full, { caseSlug: 'more', size: SIZE }).issues;

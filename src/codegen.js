@@ -177,15 +177,11 @@ export function generate(steps, { name = 'recorded flow', bundleId = 'com.yourna
   if (used.size) out.push(`// Verify on first run (not confirmed in the MobileWright docs): ${[...used].join(', ')}`);
   out.push(`test(${q(name)}, async ({ device, screen }) => {`);
   if (helper.used) {
-    out.push('  // Tap by locator; if the element is not found or cannot be tapped, tap the position recorded while recording.');
+    out.push('  // Fallback only when absent; never repeat a delivered tap after an error.');
     out.push('  const tapOrAt = async (target: { exists(): Promise<boolean>; tap(): Promise<void> }, x: number, y: number) => {');
-    out.push('    try {');
-    out.push('      if (await target.exists()) {');
-    out.push('        await target.tap();');
-    out.push('        return;');
-    out.push('      }');
-    out.push('    } catch {');
-    out.push('      // fall through to the coordinate tap');
+    out.push('    if (await target.exists()) {');
+    out.push('      await target.tap();');
+    out.push('      return;');
     out.push('    }');
     out.push('    await screen.tap(x, y);');
     out.push('  };');

@@ -8,14 +8,16 @@ import { appNodes, hashNodes, detectPackage, toNested } from './tree.js';
 import { annotate } from './locators.js';
 import { suggest } from './suggest.js';
 import { generate } from './codegen.js';
-import { createRealDevice, createMockDevice, makeLock } from './device.js';
+import { createRealDevice, createMockDevice, makeLock, assertPackage } from './device.js';
 import { checkLocalRequest } from './http-guard.js';
 import { acquireRecorderOwner } from './recorder-owner.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { observeCompletedAction } from './action-result.js';
+import { createDraftStore } from './draft-store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
+const VERSION=JSON.parse(fs.readFileSync(path.join(ROOT,'package.json'),'utf8')).version;
 
 // ---- CLI / env options -------------------------------------------------------
 const argv = process.argv.slice(2);
@@ -40,6 +42,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log('[vortex]', ...a);
 
 const oneAtATime = makeLock();
+const draftLock = makeLock();
+const drafts = createDraftStore(opts.stateDir);
 
 // Project, run and device services need Node.js 22.18+ (TypeScript type stripping).
 // On older Node the recorder itself keeps working; only those panels report that they are unavailable.
@@ -132,6 +136,8 @@ function annotatedApp(rawNodes) {
 
 async function capture(settledRaw) {
   const dev = await getDevice();
+  const began=performance.now();
+  try {
   const [shot, raw, activity] = await Promise.allSettled([dev.screenshot(), settledRaw ?? readTree(dev), dev.activity ? dev.activity().catch(() => null) : null]).then((results) => {
     const failure = results.find((r) => r.status === 'rejected');
     if (failure) throw failure.reason;
@@ -139,8 +145,12 @@ async function capture(settledRaw) {
   });
   const nodes = annotatedApp(raw);
   const size = pngSize(shot) || (await dev.size());
-  state = { nodes, size, raw, shot, activity, screenId: randomUUID() };
+  state = { nodes, size, raw, shot, activity, screenId: randomUUID(), captureMs: Math.round(performance.now()-began) };
   return payload(shot, nodes, size, dev, activity);
+  } catch(error) {
+    state={...state,nodes:[],raw:[],invalid:true,screenId:randomUUID()};
+    throw error;
+  }
 }
 
 const readTree = (dev) => dev.tree();
@@ -158,6 +168,7 @@ function payload(shot, nodes, size, dev, activity) {
     source: dev.source,
     device: dev.serial,
     activity: activity || null,
+    captureMs: state.captureMs,
     appVisible: nodes.length > 0,
     nodes: nodes.map((n) => ({
       id: n.id,
@@ -172,6 +183,7 @@ function payload(shot, nodes, size, dev, activity) {
       checked: n.checked,
       enabled: n.enabled,
       selected: n.selected,
+      visible: n.visible,
       target: n.target,
       options: n.options,
     })),
@@ -183,25 +195,31 @@ async function settle(dev, maxMs = 8000) {
   const t0 = Date.now();
   let prev = null;
   let raw;
+  let matched=false;
   await sleep(250);
   for (;;) {
     raw = await readTree(dev);
     const nodes = appNodes(raw, opts.pkg);
     const h = hashNodes(nodes);
-    if (prev !== null && h === prev) break;
+    if (prev !== null && h === prev) {matched=true;break;}
     prev = h;
     if (Date.now() - t0 > maxMs) break;
     await sleep(300);
   }
-  return { ms: Date.now() - t0, raw };
+  return { ms: Date.now() - t0, raw, stable:matched };
 }
 
 async function action(body) {
   const dev = await getDevice();
+  const began=performance.now();
   if (state.invalid) throw Object.assign(new Error('The last screen capture failed. Refresh before recording another action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
   if (body.screenId && body.screenId !== state.screenId) throw Object.assign(new Error('The screen changed in another view. Refresh before recording this action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
   const before = state.nodes;
   const beforeShot = state.shot;
+  if (['tap','doubletap','longpress','text','clear','swipe'].includes(body.kind)) {
+    if (!state.screenId || !body.screenId) throw Object.assign(new Error('Refresh and supply the current screen before a device action.'),{httpStatus:409,code:'STALE_SCREEN'});
+    if (![body.x,body.y].every(Number.isFinite) || body.x<0 || body.y<0 || body.x>=state.size.width || body.y>=state.size.height) throw Object.assign(new Error('The action coordinates are outside the captured screen.'),{httpStatus:400,code:'BAD_COORDINATES'});
+  }
   switch (body.kind) {
     case 'web': throw Object.assign(new Error('DOM recording is unavailable in this MobileWright recorder. Use exposed text/ID or explicit coordinates.'), { httpStatus: 422 });
     case 'tap': await dev.tap(body.x, body.y); break;
@@ -210,7 +228,7 @@ async function action(body) {
     case 'swipe': await dev.swipe(body.x, body.y, body.x2, body.y2, body.duration || 350); break;
     case 'text': {
       const input = state.nodes.find((n) => n.id === body.nodeId);
-      if (!input || !/EditText|TextField/i.test(input.type) || !input.target?.parts || input.target.kind === 'coordinate' || input.target.viaAncestor) {
+      if (!input || input.visible===false || !/EditText|TextField/i.test(input.type) || !input.target?.parts || input.target.kind === 'coordinate' || input.target.viaAncestor) {
         throw new Error('Refresh and choose an editable field with a replayable locator before typing.');
       }
       await dev.replaceText(input.rect.x + input.rect.w / 2, input.rect.y + input.rect.h / 2);
@@ -230,13 +248,17 @@ async function action(body) {
     }
     default: throw new Error('unknown action ' + body.kind);
   }
+  const actionMs=Math.round(performance.now()-began);
   return observeCompletedAction(async () => {
-    const settled = await settle(dev);
-    const screen = await capture(settled.raw);
+    const policy=body.capturePolicy==='stable'?'stable':'fast';
+    const observedAt=performance.now();
+    const settled = policy==='stable'?await settle(dev):null;
+    if (!settled) await sleep(150);
+    const screen = await capture(settled?.raw);
     const raw = ['swipe', 'scroll', 'hide_keyboard', 'checkpoint'].includes(body.kind) ? [] : suggest(before, state.nodes, state.size.height);
     const suggestions = vortex ? vortex.refineSuggestions(raw) : raw;
     const screenChange = vortex ? vortex.changeBetween(beforeShot, state.shot) : null;
-    return { screen, settleMs: settled.ms, suggestions, screenChange };
+    return { screen, settleMs: Math.round(performance.now()-observedAt), suggestions, screenChange, timings:{actionMs,captureMs:screen.captureMs,totalMs:Math.round(performance.now()-began),policy,stable:settled?.stable??false} };
   }, () => {
     state = { ...state, nodes: [], raw: [], screenId: randomUUID(), invalid: true };
   });
@@ -248,7 +270,8 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (c) => chunks.push(c));
+    let bytes=0;
+    req.on('data', (c) => {bytes+=c.length;if(bytes>10*1024*1024){reject(Object.assign(new Error('Request exceeds 10 MB.'),{httpStatus:413}));return;}chunks.push(c);});
     req.on('end', () => {
       try {
         resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {});
@@ -261,7 +284,7 @@ function readBody(req) {
 }
 
 const json = (res, code, obj) => {
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control':'no-store' });
   res.end(JSON.stringify(obj));
 };
 
@@ -293,16 +316,28 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': MIME['.html'] });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', 'index.html')));
     }
+    if (req.method === 'GET' && url.pathname === '/recording-tools.js') {
+      res.writeHead(200,{'Content-Type':MIME['.js'],'Cache-Control':'no-store'});
+      return res.end(fs.readFileSync(path.join(ROOT,'public','recording-tools.js')));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/draft') return json(res,200,await draftLock(async()=>drafts.read()));
+    if (req.method === 'POST' && url.pathname === '/api/draft') {
+      const body=await readBody(req);
+      return json(res,200,await draftLock(async()=>drafts.write(body.data??null,body.revision)));
+    }
     if (req.method === 'GET' && url.pathname === '/api/setup') {
       const r = await runChecks({ outDir: opts.outDir, mock: opts.mock });
       return json(res, 200, { ...r, mock: opts.mock });
     }
     if (req.method === 'GET' && url.pathname === '/api/config') {
-      return json(res, 200, { pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
+      return json(res, 200, { version:VERSION, pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       const b = await readBody(req);
-      if (b.pkg) opts.pkg = String(b.pkg).trim();
+      if (b.pkg) {
+        const pkg=String(b.pkg).trim();assertPackage(pkg);
+        if(pkg!==opts.pkg){opts.pkg=pkg;state={...state,nodes:[],raw:[],invalid:true,screenId:randomUUID()};}
+      }
       return json(res, 200, { pkg: opts.pkg });
     }
     if (req.method === 'POST' && url.pathname === '/api/record/stop') {

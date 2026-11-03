@@ -41,6 +41,7 @@ function fromJsonNode(e) {
     selected: !!e.selected,
     checked: e.checked === undefined ? null : !!e.checked,
     enabled: e.enabled === undefined ? true : !!e.enabled,
+    visible: typeof e.visible==='boolean'?e.visible:typeof e.displayed==='boolean'?e.displayed:undefined,
     children: (e.children || []).map(fromJsonNode),
   };
 }
@@ -93,6 +94,7 @@ function parseXml(s) {
       selected: a.selected === 'true',
       checked: a.checkable === 'true' ? a.checked === 'true' : null,
       enabled: a.enabled !== 'false',
+      visible: a.displayed==='true'?true:a.displayed==='false'?false:undefined,
       children: [],
     };
     (stack.length ? stack[stack.length - 1].children : roots).push(node);

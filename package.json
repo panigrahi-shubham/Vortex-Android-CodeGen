@@ -1,6 +1,6 @@
 {
   "name": "vortex-android-recorder",
-  "version": "0.8.0-beta.1",
+  "version": "1.0.0-rc.1",
   "description": "Local Android recorder and inspector for MobileWright: TypeScript Plain/POM exports, replay, reports and benchmarks.",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/server.js",
     "mock": "node src/server.js --mock",
-    "test": "node test/run-tests.js && node --test test/recorder-safety.test.mjs \"test/unit/*.test.ts\"",
+    "test": "node test/run-tests.js && node --test test/recorder-safety.test.mjs test/recorder-v1.test.mjs \"test/unit/*.test.ts\"",
     "test:legacy": "node test/run-tests.js",
     "test:unit": "node --test \"test/unit/*.test.ts\"",
     "test:integration": "node --test \"test/integration/*.test.ts\"",

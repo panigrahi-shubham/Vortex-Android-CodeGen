@@ -104,7 +104,7 @@ interface Ctx {
   size: { width: number; height: number } | null;
   issues: GenerationIssue[];
   variant: 'plain' | 'pom';
-  uses: Set<'tapOrAt' | 'secret' | 'sleep' | 'webLocator'>;
+  uses: Set<'tapOrAt' | 'secret' | 'sleep' | 'webLocator' | 'coordinateGuard'>;
   /** The spec uses `id(...)` outside page objects (WebView selection by resource-id). */
   usesId?: boolean;
 }
@@ -198,6 +198,8 @@ function eventLines(e: RecordedEvent, ctx: Ctx, S: Style): string[] {
           issue('no recorded position for this step');
           break;
         }
+        ctx.uses.add('coordinateGuard');
+        out.push('await assertCoordinateScreen(screen);');
         const fn = { tap: 'tap', longpress: 'longPress', doubletap: 'doubleTap' }[a.type];
         const why = coordTarget ? `unlabeled element at${ratio(p.x, p.y) || ' the recorded position'}` : `coordinate style chosen${ratio(p.x, p.y)}`;
         out.push(`await screen.${fn}(${p.x}, ${p.y}); // ${why}${e.templateRef ? `; template image: ${e.templateRef}` : ''}`);
@@ -210,7 +212,7 @@ function eventLines(e: RecordedEvent, ctx: Ctx, S: Style): string[] {
         break;
       }
       if (T!.warnings.length) out.push(`// note: ${oneLine(T!.warnings[0])}`);
-      if (both) ctx.uses.add('tapOrAt');
+      if (both) {ctx.uses.add('tapOrAt');ctx.uses.add('coordinateGuard');}
       out.push(S.act(kind, scr, parts!, e.title, { checkFirst: e.preCheck, fallback: both ? p : null, value: null }));
       break;
     }
@@ -272,10 +274,10 @@ function eventLines(e: RecordedEvent, ctx: Ctx, S: Style): string[] {
       issue('MobileWright 0.0.66 has no hide-keyboard action. Record "Back" instead if that closes the keyboard in your app.');
       break;
     case 'launch_app':
-      out.push('await device.launchApp(bundleId);');
+      out.push('await device.launchApp(bundleId);', 'appClosed = false;');
       break;
     case 'close_app':
-      out.push('await device.terminateApp(bundleId);');
+      out.push('await device.terminateApp(bundleId);', 'appClosed = true;');
       break;
     case 'deep_link':
       if (!a.url) issue('the deep link has no URL');
@@ -357,19 +359,28 @@ function body(rec: Recording, ctx: Ctx, S: Style): string[] {
 }
 
 const TAP_OR_AT = [
-  '// Tap by locator; if the element is not found or cannot be tapped, tap the position recorded while recording.',
+  '// Fallback only if the locator is absent. A delivered tap error must propagate without another tap.',
   'async function tapOrAt(screen: Screen, target: Locator, x: number, y: number): Promise<void> {',
-  '  try {',
-  '    if (await target.exists()) {',
-  '      await target.tap();',
-  '      return;',
-  '    }',
-  '  } catch {',
-  '    // fall through to the coordinate tap',
+  '  if (await target.exists()) {',
+  '    await target.tap();',
+  '    return;',
   '  }',
+  '  await assertCoordinateScreen(screen);',
   '  await screen.tap(x, y);',
   '}',
 ];
+
+function coordinateGuard(size: Ctx['size'], exported=false): string[] {
+  return [
+    `${exported?'export ':''}async function assertCoordinateScreen(screen: Screen): Promise<void> {`,
+    ...(!size?['  throw new Error("Recorded screen dimensions are missing. Re-record coordinate actions before replay.");']: [
+      '  const png = await screen.screenshot({ format: "png", scale: 1 });',
+      '  if (png.length < 24 || png.toString("ascii", 1, 4) !== "PNG") throw new Error("Cannot verify coordinate geometry: expected a PNG screenshot.");',
+      `  if (png.readUInt32BE(16) !== ${size.width} || png.readUInt32BE(20) !== ${size.height}) throw new Error("Screen geometry changed from ${size.width}x${size.height}. Re-record the coordinate action; no tap was sent.");`,
+    ]),
+    '}',
+  ];
+}
 
 const SECRET = [
   '// Sensitive input is never stored in the test: it is read from an environment variable at run time.',
@@ -430,17 +441,19 @@ export function generateMobilewrightPlain(rec: Recording, o: MwOptions): { files
   const b = body(rec, ctx, S).flatMap((l) => l.split('\n'));
   const out: string[] = [...header(rec, 'Plain', o.size)];
   out.push(`import { expect, test } from '@mobilewright/test';`);
-  const mwTypes = [...(ctx.uses.has('tapOrAt') ? ['Locator', 'Screen'] : []), ...(ctx.uses.has('webLocator') ? ['MobileWebViewLocator', 'MobileWebViewPage'] : [])];
+  const mwTypes = [...(ctx.uses.has('tapOrAt') ? ['Locator'] : []), ...(ctx.uses.has('coordinateGuard') ? ['Screen'] : []), ...(ctx.uses.has('webLocator') ? ['MobileWebViewLocator', 'MobileWebViewPage'] : [])];
   if (mwTypes.length) out.push(`import type { ${mwTypes.join(', ')} } from 'mobilewright';`);
   out.push('', 'test.use({ autoAppLaunch: false });', '', `const bundleId = ${ts(pkg)};`, 'const id = (name: string) => `${bundleId}:id/${name}`;', '');
   if (ctx.uses.has('tapOrAt')) out.push(...TAP_OR_AT, '');
+  if (ctx.uses.has('coordinateGuard')) out.push(...coordinateGuard(o.size), '');
   if (ctx.uses.has('secret')) out.push(...SECRET, '');
   if (ctx.uses.has('webLocator')) out.push(...WEB_LOCATOR, '');
   out.push(`test(${ts(rec.name)}, async ({ device, screen }) => {`);
-  out.push('  await device.launchApp(bundleId);', '  try {');
+  if(rec.events[0]?.action.type!=='launch_app')out.push('  await device.launchApp(bundleId);');
+  out.push('  let appClosed = false;', '  try {');
   if (!b.length) out.push('    // no steps recorded yet');
   for (const l of b) out.push(l ? '    ' + l : '');
-  out.push('  } finally {', '    await device.terminateApp(bundleId);', '  }', '});', '');
+  out.push('  } finally {', '    if (!appClosed) await device.terminateApp(bundleId);', '  }', '});', '');
   return {
     files: [{ path: `mobilewright/plain/${o.caseSlug}.test.ts`, content: out.join('\n'), framework: 'mobilewright', variant: 'plain', role: 'entry' }],
     issues: ctx.issues,
@@ -526,10 +539,12 @@ export function generateMobilewrightPom(rec: Recording, o: MwOptions): { files: 
     `export const bundleId = ${ts(pkg)};`,
     'export const id = (name: string) => `${bundleId}:id/${name}`;',
     '',
+    ...coordinateGuard(o.size,true),
+    '',
     'export interface ActionOptions {',
     '  /** Check the element is visible before acting (default true). */',
     '  checkFirst?: boolean;',
-    '  /** Tap this recorded position if the element is not found or cannot be tapped. */',
+    '  /** Tap this position only if the locator is absent; delivered tap errors propagate. */',
     '  fallback?: { x: number; y: number };',
     '}',
     '',
@@ -538,14 +553,11 @@ export function generateMobilewrightPom(rec: Recording, o: MwOptions): { files: 
     '',
     '  protected async tapTarget(target: Locator, o: ActionOptions = {}): Promise<void> {',
     '    if (o.fallback) {',
-    '      try {',
-    '        if (await target.exists()) {',
-    '          await target.tap();',
-    '          return;',
-    '        }',
-    '      } catch {',
-    '        // fall through to the coordinate tap',
+    '      if (await target.exists()) {',
+    '        await target.tap();',
+    '        return;',
     '      }',
+    '      await assertCoordinateScreen(this.screen);',
     '      await this.screen.tap(o.fallback.x, o.fallback.y);',
     '      return;',
     '    }',
@@ -653,10 +665,13 @@ export function generateMobilewrightPom(rec: Recording, o: MwOptions): { files: 
   if (dataNames.length) imports.push(`import { ${dataNames.join(', ')} } from '../${dataFile}';`);
   const spec = [...header(rec, 'POM', o.size), ...imports, '', 'test.use({ autoAppLaunch: false });', ''];
   const fixtures = ['device', 'screen', ...used.map(pageVar)];
-  spec.push(`test(${ts(rec.name)}, async ({ ${fixtures.join(', ')} }) => {`, '  await device.launchApp(bundleId);', '  try {');
+  spec.push(...(b.some(l=>l.includes('assertCoordinateScreen(screen)'))?[`import { assertCoordinateScreen } from '../pages/app';`,'']:[]));
+  spec.push(`test(${ts(rec.name)}, async ({ ${fixtures.join(', ')} }) => {`);
+  if(rec.events[0]?.action.type!=='launch_app')spec.push('  await device.launchApp(bundleId);');
+  spec.push('  let appClosed = false;', '  try {');
   if (!b.length) spec.push('    // no steps recorded yet');
   for (const l of b) spec.push(l ? '    ' + l : '');
-  spec.push('  } finally {', '    await device.terminateApp(bundleId);', '  }', '});');
+  spec.push('  } finally {', '    if (!appClosed) await device.terminateApp(bundleId);', '  }', '});');
   // `expect` and `screen` are always imported/destructured for consistency; drop them when unused so linters stay quiet.
   let specText = spec.join('\n');
   const bodyText = b.join('\n');

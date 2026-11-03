@@ -1,4 +1,4 @@
-name: Beta checks
+name: MobileWright checks
 on:
   push:
   pull_request:
@@ -19,5 +19,5 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
-      - run: node --test test/integration/mobilewright-only.test.ts test/integration/package-windows.test.ts
+      - run: node --test test/integration/mobilewright-only.test.ts test/integration/package-windows.test.ts test/integration/v1-recorder.test.ts
       - run: npm run package:windows

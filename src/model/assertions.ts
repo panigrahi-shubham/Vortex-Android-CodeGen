@@ -7,7 +7,7 @@
 //  - checks on the acted-on element's state (checked/selected/enabled) rank first, then elements that appeared or
 //    disappeared, then text changes; stable resource-ids rank above labels and texts;
 //  - checks without a locator are dropped (they could only be coordinates);
-//  - at most six suggestions are kept; only the first one is pre-selected.
+//  - at most six suggestions are kept; the UI requires explicit acceptance.
 
 import { isDynamic } from '../locators.js';
 

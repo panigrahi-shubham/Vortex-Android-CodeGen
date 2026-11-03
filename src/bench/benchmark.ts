@@ -203,6 +203,7 @@ export class BenchmarkRunner {
     const rec: Recording = readCaseRecording(outDir, cfg.ref).recording;
     const info = listProject(outDir).modules.find((m) => m.module === cfg.ref.module)?.cases.find((c) => c.case === cfg.ref.case);
     if (!info) throw new BenchError('NOT_SAVED', 404, `No saved case ${cfg.ref.module}/${cfg.ref.case}.`);
+    if(info.pendingReview.length)throw new BenchError('PENDING_REVIEW',409,'Resolve this case\'s .vortex-new files before benchmarking.');
     const plain: Record<string, string> = {};
     for (const fw of frameworks) {
       const e = info.entries.find((x) => x.framework === fw && x.variant === 'plain' && x.exists);
@@ -234,7 +235,7 @@ export class BenchmarkRunner {
       fs.writeFileSync(f, ins.content);
       copies[fw] = path.relative(outDir, f);
     }
-    const m = await this.#d.meta(serial, this.#d.pkg()).catch(() => null);
+    const m = await this.#d.meta(serial, rec.app.package).catch(() => null);
     const record: BenchRecord = {
       schema: 'vortex.benchmark', version: 1, id, status: 'running', error: null, config: cfg,
       case: {
@@ -242,7 +243,7 @@ export class BenchmarkRunner {
         steps: rec.events.map((e, i) => ({ n: i + 1, type: e.action.type, title: e.title, kind: kindOf(e.action.type) })),
         assertions: rec.events.filter((e) => e.action.type === 'assert').length + rec.events.reduce((a, e) => a + (e.post?.length ?? 0), 0),
       },
-      environment: { device: m?.device ?? null, appPackage: this.#d.pkg(), buildType: m?.buildType ?? 'unknown', appVersion: m?.appVersion ?? null, simulated: this.#d.simulated, host: `${process.platform} ${process.arch}, Node ${process.version}` },
+      environment: { device: m?.device ?? null, appPackage: rec.app.package, buildType: m?.buildType ?? 'unknown', appVersion: m?.appVersion ?? null, simulated: this.#d.simulated, host: `${process.platform} ${process.arch}, Node ${process.version}` },
       startedAt: new Date().toISOString(), endedAt: null,
       progress: { done: 0, total: (cfg.warmup + cfg.iterations) * frameworks.length, current: 'starting' },
       samples: [], probes: {}, probeNotes: [], results: {}, probeSummary: {}, comparisons: [], notes: [],

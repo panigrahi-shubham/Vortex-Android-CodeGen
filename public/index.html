@@ -161,6 +161,8 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
 </nav>
 <div id="restoreBanner" class="banner"><span id="restoreText"></span><button id="btnRestore" class="primary">Restore steps</button><button id="btnDiscard">Discard</button></div>
 <div id="discBanner" class="banner err"></div>
+<div class="row" style="padding:6px 20px"><span class="badge">MobileWright 1.0 RC</span><label>Capture <select id="capturePolicy"><option value="fast">Fast · one fresh capture</option><option value="stable">Stable · compare consecutive trees</option></select></label><span id="captureTiming" class="mut"></span><span id="draftStatus" class="mut" role="status"></span></div>
+<dialog id="stepEditor" style="width:min(650px,95vw)"><h3>Edit recorded step</h3><form id="stepEditForm"><label>Title<input id="editTitle" style="width:100%"></label><p id="editInputRow"><label>Replacement input text<input id="editText" style="width:100%"></label></p><p id="editExpectedRow"><label>Expected assertion value<input id="editExpected" style="width:100%"></label></p><p id="editWaitRow"><label>Wait (milliseconds)<input id="editWait" type="number" min="0" max="300000"></label></p><p><label>Comment<input id="editComment" style="width:100%"></label></p><details><summary>Advanced: recorded locator</summary><p class="mut">ID, label, text, type or scoped locator parts. These edits affect replay; they never act on the phone.</p><textarea id="editLocator" rows="5" style="width:100%;font-family:monospace"></textarea></details><p class="row"><button type="submit" class="primary">Apply changes</button><button type="button" id="editCancel">Cancel</button></p><p id="editError" class="warn" role="alert"></p></form></dialog>
 
 <main>
   <div class="col">
@@ -333,7 +335,8 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
 <div id="menu"></div>
 <div id="toast"></div>
 
-<script>
+<script type="module">
+import { editStep, moveStep, duplicateStep, hitCandidates, ambiguousHit, reviewRecording, safeDraft } from '/recording-tools.js';
 const $ = (s) => document.querySelector(s);
 const MODES = [
   ['tap', 'Tap'], ['longpress', 'Long-press'], ['doubletap', 'Double-tap'], ['swipe', 'Swipe'],
@@ -358,9 +361,11 @@ function toast(msg, err) {
   t.textContent = msg; t.className = err ? 'err' : ''; t.style.display = 'block';
   clearTimeout(toast.t); toast.t = setTimeout(() => (t.style.display = 'none'), err ? 7000 : 2500);
 }
+const disabledBeforeBusy=new WeakMap();
 function setBusy(b, msg) {
   busy = b; $('#busy').textContent = b ? (msg || 'Working...') : '';
-  document.querySelectorAll('header button:not(.hbtn), main button').forEach((x) => (x.disabled = b));
+  document.querySelectorAll('header button:not(.hbtn), main button').forEach(x=>{if(b){if(!disabledBeforeBusy.has(x))disabledBeforeBusy.set(x,x.disabled);x.disabled=true;}else if(disabledBeforeBusy.has(x)){x.disabled=disabledBeforeBusy.get(x);disabledBeforeBusy.delete(x);}});
+  if(!b)updateGuide();
 }
 const tail = (id) => (id || '').split('/').pop();
 const titleOf = (n) => n.text || n.label || tail(n.identifier) || n.type.split('.').pop();
@@ -449,8 +454,7 @@ function hit(x, y, nativeOnly = false) {
   // Accessibility providers can flatten a modal before the underlying page.
   // Sibling order then is not drawing order. Prefer a concrete small control
   // at the point over a broad background row/container.
-  const candidates = S.nodes.filter(n => n.rect.w > 0 && n.rect.h > 0 && x >= n.rect.x && x < n.rect.x + n.rect.w && y >= n.rect.y && y < n.rect.y + n.rect.h);
-  candidates.sort((a,b) => a.rect.w*a.rect.h - b.rect.w*b.rect.h || b.depth-a.depth || b.id-a.id);
+  const candidates = hitCandidates(S.nodes,x,y);
   return candidates[0] || null;
 }
 function showInfo(n) {
@@ -508,9 +512,17 @@ function selectInspection(n, point) {
   $('#inspectDetail').innerHTML = `<dl class="kv">${rows.map(([k,v]) => `<dt>${esc(k)}</dt><dd style="overflow-wrap:anywhere">${esc(v)}</dd>`).join('')}</dl>` +
     `<div class="row"><button data-ins-copy="point">Copy pixels</button><button data-ins-copy="percent">Copy %</button>${n?.text ? '<button data-ins-copy="text">Copy text</button>' : ''}</div>` +
     (options ? `<label class="row">Locator <select id="inspectChoice" style="max-width:100%">${options}</select></label><code id="inspectExpr" style="display:block;overflow-wrap:anywhere"></code><div class="row"><button data-ins-action="test">Highlight matches</button><button data-ins-copy="locator">Copy locator</button><button data-ins-action="use">Use for recording</button></div><p id="inspectMatch" class="mut"></p>` : '<p class="warn">No semantic locator is exposed for this target. Coordinate taps depend on the screen layout.</p>') +
-    `<div class="row"><button data-ins-action="tap" ${n?.target?.expr ? '' : 'disabled'}>Record tap</button><button data-ins-action="type" ${n && findInput(n)?.target?.expr ? '' : 'disabled'}>Record type</button><button data-ins-action="point">Record coordinate tap</button><button data-ins-action="assert" ${n?.target?.expr ? '' : 'disabled'}>Add assertion</button></div>` +
+    `<div class="row"><button data-ins-action="tap" ${n?.target?.expr&&n.visible!==false ? '' : 'disabled'}>Record tap</button><button data-ins-action="type" ${n&&n.visible!==false&&findInput(n)?.target?.expr ? '' : 'disabled'}>Record type</button><button data-ins-action="point">Record coordinate tap</button><button data-ins-action="assert" ${n?.target?.expr ? '' : 'disabled'}>Add assertion</button></div>` +
     '<small class="mut">WebView text is available only when the app exposes it. Match counts describe this captured tree, not a live replay check.</small>';
   if (options) { $('#inspectExpr').textContent = INSPECT.choices[0].expr; $('#inspectChoice').onchange = () => { INSPECT.choice = Number($('#inspectChoice').value); $('#inspectExpr').textContent = INSPECT.choices[INSPECT.choice].expr; $('#inspectMatch').textContent = ''; }; }
+  const overlaps=hitCandidates(S.nodes,at.x,at.y);
+  if(overlaps.length>1){
+    const chooser=document.createElement('label');chooser.className='row';chooser.textContent='Controls at this point ';
+    const select=document.createElement('select');select.id='overlapChoice';select.style.maxWidth='100%';
+    for(const candidate of overlaps.slice(0,40)){const option=new Option(`${titleOf(candidate)} · ${candidate.type.split('.').pop()}`,String(candidate.id));select.add(option);}
+    select.value=String(n?.id);select.onchange=()=>selectInspection(S.nodes.find(x=>x.id===Number(select.value)),at);chooser.append(select);$('#inspectDetail').prepend(chooser);
+    if(ambiguousHit(S.nodes,overlaps))chooser.insertAdjacentHTML('afterend','<p class="warn">Overlapping controls are exposed. Choose the intended control and review its highlight before recording an action.</p>');
+  }
 }
 async function recordCoordinate(point) {
   if (!S || busy || screenStale) return;
@@ -620,6 +632,7 @@ function findInput(n) {
 async function onClick(pt, ev, nativeOnly = false) {
   const n = hit(pt.x, pt.y, nativeOnly);
   if (mode === 'inspect') return selectInspection(n, pt);
+  if(ambiguousHit(S.nodes,hitCandidates(S.nodes,pt.x,pt.y))){setMode('inspect');selectInspection(n,pt);return toast('Overlapping controls: choose the intended target in the inspector before recording.',true);}
   if (!n) {
     if (mode === 'tap' && $('#tapStyle').value === 'coord') return recordCoordinate(pt);
     return toast('No exposed element here. Use Inspect to select this screen point.');
@@ -705,7 +718,7 @@ async function perform(body, step) {
   setBusy(true, 'Running on the phone and waiting for the screen to settle...');
   try {
     step.screen ||= screenOf(S);
-    const res = await api('/api/action', { ...body, screenId: S.screenId });
+    const res = await api('/api/action', { ...body, screenId: S.screenId, capturePolicy:$('#capturePolicy').value });
     if (res.actionCompleted && !res.screen) {
       step.comment = 'Action completed; screen capture failed. Review the next step after refreshing.';
       steps.push(step);
@@ -718,7 +731,8 @@ async function perform(body, step) {
     step.settleMs = res.settleMs;
     // post-action verification: almost nothing changed after a tap-like action
     if (typeof res.screenChange === 'number' && res.screenChange < 0.003 && ['tap', 'doubletap', 'longpress'].includes(step.type)) step.noChange = true;
-    step.sugg = (res.suggestions || []).map((s, i) => ({ ...s, on: i === 0 }));
+    step.sugg = (res.suggestions || []).map((s) => ({ ...s, on: false }));
+    if(res.timings){step.timings=res.timings;$('#captureTiming').textContent=`Action ${res.timings.actionMs} ms · capture ${res.timings.captureMs} ms · total ${res.timings.totalMs} ms (${res.timings.policy})`;}
     S = res.screen; screenStale = !!S.stale; steps.push(step);
     render(); renderSteps(); regenerate();
   } catch (e) { toast(e.message, true); } finally { setBusy(false); }
@@ -762,11 +776,48 @@ function renderSteps() {
       ? `<div class="pre"><label><input type="checkbox" data-sens="${i}" ${st.secretEnv ? 'checked' : ''}> sensitive input (password, token, OTP): never stored</label>` +
         (st.secretEnv ? `<div class="pg">read from <input class="secret-env" data-env="${i}" value="${esc(st.secretEnv)}"></div>` : '') + '</div>' : '';
     return `<div class="step" id="step-${i}"><div class="hd"><span class="badge">${i + 1}</span><b>${esc(hd)}</b>${isWeb ? '<span class="ctx web">web</span>' : ''}${kind}<button class="x" data-del="${i}" title="Delete this step">x</button></div>` +
-      (T && T.expr ? `<div class="expr">${esc(T.expr)}${isWeb && T.parts && T.parts.frames ? ' <span class="mut">in iframe ' + esc(T.parts.frames.join(' > ')) + '</span>' : ''}</div>` : '') + warn + slow + still + vis + style + pre + sens + sugg + page + '</div>';
+      (T && T.expr ? `<div class="expr">${esc(T.expr)}${isWeb && T.parts && T.parts.frames ? ' <span class="mut">in iframe ' + esc(T.parts.frames.join(' > ')) + '</span>' : ''}</div>` : '') + warn + slow + still + vis + style + pre + sens + sugg + page + `<div class="row"><button data-edit="${i}">Edit</button><button data-move="${i}" data-offset="-1" ${i===0?'disabled':''}>Move up</button><button data-move="${i}" data-offset="1" ${i===steps.length-1?'disabled':''}>Move down</button><button data-duplicate="${i}">Duplicate</button><button data-check-at="${i}" data-side="before">Check before</button><button data-check-at="${i}" data-side="after">Check after</button></div>` + '</div>';
   }).join('') || `<div class="empty"><b>No steps yet.</b><ol><li>Click on the phone picture to <b>tap</b> (drag to <b>swipe</b>).</li><li>To type, check or wait: pick <b>Type</b>, <b>Assert</b> or <b>Wait for</b> first, then click the element.</li><li>Press <b>Save</b>, then <b>Run</b>.</li></ol>Keys: <kbd>T</kbd> tap · <kbd>Y</kbd> type · <kbd>A</kbd> assert · <kbd>W</kbd> wait · <kbd>R</kbd> refresh · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>?</kbd> all shortcuts</div>`;
   updateGuide();
+  renderReview();
 }
+function renderReview(){
+  let panel=$('#recordingReview');if(!panel){panel=document.createElement('details');panel.id='recordingReview';$('#steps').before(panel);}
+  const issues=reviewRecording(stepPayload());
+  panel.innerHTML=`<summary>Recording review · ${issues.length} item(s)</summary>`+(issues.length?issues.map(x=>`<p class="mut">Step ${x.step}: ${esc(x.message)}</p>`).join(''):'<p class="mut">No structural warnings. Verify the intended app results during replay.</p>');
+}
+let editingStep=null;
+function openStepEditor(index){
+  const step=steps[index];editingStep=index;$('#editTitle').value=step.title||'';$('#editComment').value=step.comment||'';
+  $('#editInputRow').hidden=step.type!=='type'||!!step.secretEnv;$('#editText').value=step.secretEnv?'':step.args?.text||'';
+  $('#editExpectedRow').hidden=step.type!=='assert'||!['text','contains','count'].includes(step.args?.assertion);$('#editExpected').value=step.args?.expected??'';
+  $('#editWaitRow').hidden=step.type!=='sleep';$('#editWait').value=step.args?.ms||0;
+  $('#editLocator').value=step.target?.parts?JSON.stringify(step.target.parts,null,2):'';$('#editError').textContent='';$('#stepEditor').showModal();
+}
+$('#editCancel').onclick=()=>$('#stepEditor').close();
+$('#stepEditForm').onsubmit=e=>{
+  e.preventDefault();const step=steps[editingStep];if(!step)return;
+  try{
+    const patch={title:$('#editTitle').value,comment:$('#editComment').value};
+    if(!$('#editInputRow').hidden)patch.text=$('#editText').value;
+    if(!$('#editExpectedRow').hidden)patch.expected=$('#editExpected').value;
+    if(!$('#editWaitRow').hidden)patch.ms=Number($('#editWait').value);
+    if($('#editLocator').value.trim())patch.parts=JSON.parse($('#editLocator').value);
+    steps=editStep(steps,editingStep,patch);$('#stepEditor').close();$('#editText').value='';renderSteps();regenerate();
+  }catch(error){$('#editError').textContent=error.message;}
+};
 $('#steps').addEventListener('click', async (e) => {
+  if(busy)return;
+  const edit=e.target.closest('[data-edit]'), move=e.target.closest('[data-move]'), duplicate=e.target.closest('[data-duplicate]'), check=e.target.closest('[data-check-at]');
+  if(edit)return openStepEditor(Number(edit.dataset.edit));
+  if(move){steps=moveStep(steps,Number(move.dataset.move),Number(move.dataset.offset));renderSteps();regenerate();return;}
+  if(duplicate){steps=duplicateStep(steps,Number(duplicate.dataset.duplicate));renderSteps();regenerate();return;}
+  if(check){
+    const node=selectedNode();if(!node?.target?.parts)return toast('Select a control in the current screenshot first. The new check uses that control.',true);
+    const expected=prompt('Expected text (leave empty for a visibility check)',node.text||'');if(expected===null)return;
+    const assertion={type:'assert',title:titleOf(node),target:structuredClone(node.target),screen:screenOf(S),args:expected?{assertion:'text',expected}:{assertion:'visible'}};
+    steps.splice(Number(check.dataset.checkAt)+(check.dataset.side==='after'?1:0),0,assertion);renderSteps();regenerate();return;
+  }
   const vf = e.target.closest('[data-vfind]'), vu = e.target.closest('[data-vuse]');
   if (vf) {
     const st = steps[+vf.dataset.vfind];
@@ -954,29 +1005,50 @@ for (const [id, key] of [['fw', 'vortex.framework'], ['mode', 'vortex.mode'], ['
   $('#' + id).addEventListener('change', () => { try { localStorage.setItem(key, $('#' + id).value); } catch {} regenerate(); });
 }
 $('#tapStyle').addEventListener('change', () => toast('New tap steps will use this style. Change an existing step in its card.'));
-$('#pkg').addEventListener('change', async () => { await api('/api/config', { pkg: $('#pkg').value }); refresh(); });
+$('#pkg').addEventListener('change', async () => {try{await api('/api/config', { pkg: $('#pkg').value });refresh();}catch(error){toast(error.message,true);$('#pkg').value=(await api('/api/config')).pkg;}});
 window.addEventListener('resize', () => { if (S) render(); });
 
 // ---------- unsaved recording safety (survives a reload, a disconnected phone or a recorder restart) ----------
 const AUTOSAVE_KEY = 'vortex.recording.v1';
 let restoreOffered = false;
+let draftRevision=null, draftConflict=false, draftTimer=null, draftQueue=Promise.resolve();
+function persistDraft(data){
+  if(draftRevision===null||draftConflict)return;
+  draftQueue=draftQueue.then(async()=>{
+    if(draftConflict)return;
+    const response=await call('/api/draft',{revision:draftRevision,data});
+    if(!response.ok){
+      if(response.data.code==='DRAFT_CONFLICT'){draftConflict=true;$('#draftStatus').textContent='Draft conflict · browser copy preserved. Reload to review.';return;}
+      throw Error(response.data.error||'Draft sync unavailable');
+    }
+    draftRevision=response.data.revision;$('#draftStatus').textContent=data?'Draft saved in browser and server':'Draft cleared';
+  }).catch(()=>{$('#draftStatus').textContent='Browser draft saved · server sync unavailable';});
+}
 function autosave(savedToFile) {
   if (!restoreOffered) return; // do not overwrite an older recording before the user has answered the restore prompt
   if (!steps.length) return clearAutosave();
-  const data = { steps, assets, name: $('#tname').value, module: $('#tmodule').value, savedAt: new Date().toISOString(), savedToFile: !!savedToFile };
+  const data = safeDraft({ steps, assets, pkg:$('#pkg').value||S?.pkg, device:S?.device||'', capturePolicy:$('#capturePolicy').value, name: $('#tname').value, module: $('#tmodule').value, savedAt: new Date().toISOString(), savedToFile: !!savedToFile });
   try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data)); }
   catch { try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ ...data, assets: [] })); } catch { /* storage unavailable */ } }
+  clearTimeout(draftTimer);draftTimer=setTimeout(()=>persistDraft(data),450);
 }
-function clearAutosave() { try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} }
-function offerRestore() {
+function clearAutosave() { try { localStorage.removeItem(AUTOSAVE_KEY); } catch {}clearTimeout(draftTimer);if(restoreOffered)persistDraft(null); }
+async function offerRestore() {
   let data = null;
   try { data = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null'); } catch {}
+  try{
+    const remote=await api('/api/draft');draftRevision=remote.revision;
+    if(remote.data?.steps?.length&&(!data||Date.parse(remote.data.savedAt)>Date.parse(data.savedAt)))data=remote.data;
+  }catch{$('#draftStatus').textContent='Server draft unavailable · browser recovery remains available';}
   if (!data || !Array.isArray(data.steps) || !data.steps.length || data.savedToFile) { restoreOffered = true; return; }
-  $('#restoreText').textContent = 'Unsaved recording found: ' + data.steps.length + ' step(s) of "' + (data.name || 'recorded flow') + '" from ' + new Date(data.savedAt).toLocaleString() + '.';
+  $('#restoreText').textContent = 'Unsaved recording found: ' + data.steps.length + ' step(s) of "' + (data.name || 'recorded flow') + '" for '+(data.pkg||'the previously selected app')+' on '+(data.device||'an unspecified phone')+' from ' + new Date(data.savedAt).toLocaleString() + '.';
   $('#restoreBanner').style.display = 'flex';
-  $('#btnRestore').onclick = () => {
+  $('#btnRestore').onclick = async () => {
+    if(data.pkg){try{await api('/api/config',{pkg:data.pkg});$('#pkg').value=data.pkg;}catch(error){toast(error.message,true);return;}}
     steps = data.steps; assets = data.assets || []; $('#tname').value = data.name || 'recorded flow'; if (data.module) $('#tmodule').value = data.module;
+    if(data.capturePolicy)$('#capturePolicy').value=data.capturePolicy;
     restoreOffered = true; $('#restoreBanner').style.display = 'none'; renderSteps(); regenerate(); toast('Restored ' + steps.length + ' steps.');
+    refresh();
   };
   $('#btnDiscard').onclick = () => { if (confirm('Discard the unsaved recording?')) { clearAutosave(); restoreOffered = true; $('#restoreBanner').style.display = 'none'; } };
 }
@@ -1409,9 +1481,9 @@ $('#bCancel').onclick = async () => { if (BENCH) await call('/api/bench/' + enco
 
 // ---------- start ----------
 (async function init() {
-  offerRestore();
   buildToolbar(); renderSteps(); regenerate();
   try { const c = await api('/api/config'); $('#pkg').value = c.pkg; if (c.mock) { $('#devBadge').textContent = 'mock device'; devMock = true; } } catch {}
+  await offerRestore();
   updateGuide();
   refresh();
   // First visit on a real setup: show what is missing once (afterwards it is one click away in the guide bar).
