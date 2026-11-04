@@ -17,6 +17,7 @@ export const INCLUDE = [
   'package.json', 'README.md', 'CHANGELOG.md', 'BASELINE_AUDIT.md',
   'start-vortex.cmd', 'start-vortex.ps1', 'vortex.config.example.cmd',
   'src/', 'public/', 'samples/', 'docs/', 'examples/',
+  'scripts/stockpilot-smoke.mjs',
   'test/fixtures/fake-mobilewright-driver.mjs', 'test/fixtures/webview-host.mjs',
 ];
 const SKIP = /(^|\/)(node_modules|\.vortex|\.vortex-bench|generated|dist)(\/|$)|\.log$|\.tmp$/;

@@ -24,7 +24,7 @@ import { fromUiSteps } from '../../src/model/recording.ts';
 import { buildCase, listProject, saveCase, type Mode } from '../../src/project/project.ts';
 import type { Recording } from '../../src/model/recording.ts';
 import type { Variant } from '../../src/model/output.ts';
-import { HOME, PKG, SAMPLES, sampleRecording } from '../support/sample-flow.ts';
+import { HOME, PKG, SAMPLES, sampleRecording, load, byId } from '../support/sample-flow.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PROJECT = process.env.VORTEX_MOBILEWRIGHT_DIR ? path.resolve(process.env.VORTEX_MOBILEWRIGHT_DIR) : '';
@@ -68,6 +68,11 @@ async function run(files: string[], timeoutMs = 120_000) {
 // Given Plain and POM output (with a sensitive input), When type-checked under strict settings against @mobilewright/test, Then there are no errors.
 test('generated TypeScript type-checks against the real @mobilewright/test types', { skip }, () => {
   save(sampleRecording({ sensitive: true }), 'typed', 'both', 'pom');
+  const adbRecording=fromUiSteps([
+    {type:'tap',title:'Search',target:byId(load('home.json'),'home_search_input').target,mode:'name'},
+    {type:'adb_command',title:'ADB text',args:{commandArgs:['shell','input','text','<secret>'],secretIndex:3},secretEnv:'VORTEX_SECRET_ADB_TEXT'},
+  ],{id:'adb-typecheck',name:'ADB typecheck',module:'adb',appPackage:PKG,serial:'mock-device',screen:SIZE,version:'test'});
+  save(adbRecording,'adb-types','both','pom','adb');
   fs.writeFileSync(path.join(out, 'tsconfig.json'), JSON.stringify({
     compilerOptions: { strict: true, noEmit: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', skipLibCheck: true, noUnusedLocals: true, types: ['node'], typeRoots: [path.join(ROOT, 'node_modules', '@types')] },
     include: ['**/*.ts'],
@@ -77,6 +82,24 @@ test('generated TypeScript type-checks against the real @mobilewright/test types
     execFileSync(process.execPath, [path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', path.join(out, 'tsconfig.json')], { encoding: 'utf8' });
   } catch (e) {
     assert.fail(`tsc failed:\n${(e as { stdout?: string }).stdout}`);
+  }
+});
+
+test('focused type appends once through the public driver API in Plain and POM', {skip},async()=>{
+  const field=byId(load('home.json'),'home_search_input');
+  const recording=fromUiSteps([
+    {type:'tap',title:'Search',target:field.target,mode:'name'},
+    {type:'type_focused',title:'Focused search',args:{text:'bulk input'}},
+    {type:'assert',title:'Search',target:field.target,args:{assertion:'text',expected:'bulk input'}},
+  ],{id:'focused-e2e',name:'Focused input replay',module:'input',appPackage:PKG,serial:'mock-device',screen:SIZE,version:'test'});
+  const entries=save(recording,'focused','both','pom');
+  for(const file of [entries.plain,entries.pom]){
+    fs.writeFileSync(driverLog,'');
+    const {id,result}=await run([file]);
+    assert.equal(result.status,'passed',result.summary+'\n'+runner.get(id).output.slice(-2000));
+    const operations=fs.readFileSync(driverLog,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+    assert.equal(operations.filter(op=>op.op==='typeText').length,1);
+    assert.equal(operations.filter(op=>op.op==='clearText').length,0);
   }
 });
 

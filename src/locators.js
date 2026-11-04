@@ -12,6 +12,8 @@
 const DYN = /[₹$€£]\s?\d|\b\d{1,2}:\d{2}|(^|[\s,(])\d+([.,]\d+)*\s+[a-z%]|^\d+([.,]\d+)*$|\d+\s?%/i;
 export const isDynamic = (s) => DYN.test(s || '');
 
+import { isEditableControl } from './input-controls.js';
+
 const norm = (s) => String(s || '').trim().toLowerCase();
 
 export const q = (s) =>
@@ -163,7 +165,7 @@ function bestFor(c, ctx) {
 export function bestTarget(n, ctx) {
   // An editor must resolve to the editor itself, never a labelled parent row.
   // Empty WebView inputs often expose only their Android class.
-  if (/EditText|TextField/i.test(n.type)) {
+  if (isEditableControl(n)) {
     const direct = bestFor(n, ctx);
     if (direct && direct.parts.by !== 'scoped') return { ...direct, score: direct.quality, nodeId: n.id, viaAncestor: false };
     const same = ctx.nodes.filter(c => c.type.toLowerCase() === n.type.toLowerCase());

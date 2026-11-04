@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.0-beta.1 — 2026-11-04
+
+MobileWright 2.0 beta. Physical-device unattended CRUD acceptance remains pending.
+
+- Added an ADB panel with common presets, custom command/JSON argument parsing, Run only, Add to script, Run & record, command copying, output and binary downloads.
+- Added 1–300 second command timeouts and editing of saved ADB argument arrays and timeouts.
+- Added Plain/POM ADB helpers using the runtime-selected transport serial, protected sensitive arguments and an explicit refusal to contact hardware from simulated replay.
+- Added whole-value Quick type and keypad coordinate shortcuts; native autocomplete input classes are recognized across browser, server and locator generation.
+- Added screenshot-only previews which avoid tree lookup and invalidate previous hit targets. Quick type defaults to a preview. Full capture screenshots are taken after hierarchy lookup completes.
+- Added Inspect copy-on-selection and copies of IDs, text, class, details, coordinates, ADB taps and MobileWright tap statements.
+- Added current-file, entry-script and all-generated-files copying with fresh generation and a clipboard fallback.
+- Included a read-only StockPilot smoke example, its launcher and a 20-scenario acceptance checklist.
+- Added `--mobilecli-device` and PowerShell device parameters so emulator aliases do not require a custom shell tree command.
+- Retained the v1 editor, draft recovery, guarded coordinate fallback, package binding and explicit assertion selection.
+
+No DOM acquisition or CSS/XPath discovery was added. This beta does not claim completion of the live ten-cycle Add/Edit/Delete gate or a 500-case application regression suite.
+
 ## 1.0.0-rc.1 — 2026-11-03
 
 MobileWright v1 feature release candidate. Stable acceptance on physical devices remains pending.

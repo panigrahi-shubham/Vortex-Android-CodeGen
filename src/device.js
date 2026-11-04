@@ -2,6 +2,7 @@ import { execFile, exec } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseTree, appNodes } from './tree.js';
+import { validateAdbArgs, adbTransportArgs, adbTimeout } from '../public/adb-tools.js';
 
 const KEYCODES = { BACK: 4, HOME: 3, ENTER: 66, APP_SWITCH: 187, RECENT: 187, DELETE: 67, TAB: 61, SEARCH: 84 };
 
@@ -52,7 +53,7 @@ export async function dumpUiautomator(adbRun, sleepFn = (ms) => new Promise((r) 
   throw new Error(`uiautomator dump did not return a screen after ${tries} tries: "${snippet}". Close other automation tools (a running test, Appium, the MobileWright Inspector) and press Refresh.`);
 }
 
-export async function createRealDevice({ serial, treeCmd = 'mobilecli dump ui', treeSource = 'auto', mobilecli = null, log = console.log } = {}) {
+export async function createRealDevice({ serial, mobilecliDevice = '', treeCmd = 'mobilecli dump ui', treeSource = 'auto', mobilecli = null, log = console.log } = {}) {
   if (!serial) {
     const out = (await run('adb', ['devices'])).toString();
     const devs = out.split(/\r?\n/).slice(1).map((l) => l.trim().split(/\s+/)).filter((p) => p[1] === 'device').map((p) => p[0]);
@@ -60,7 +61,7 @@ export async function createRealDevice({ serial, treeCmd = 'mobilecli dump ui', 
     if (devs.length > 1) throw new Error(`Several devices connected (${devs.join(', ')}). Start with --device <serial>.`);
     serial = devs[0];
   }
-  const adb = (args) => run('adb', ['-s', serial, ...args]);
+  const adb = (args, options) => run('adb', ['-s', serial, ...args], options);
   const exclusive = makeLock();
   let useMobilecli = treeSource !== 'uiautomator';
   let source = useMobilecli ? 'mobilecli' : 'uiautomator';
@@ -83,7 +84,7 @@ export async function createRealDevice({ serial, treeCmd = 'mobilecli dump ui', 
         if (useMobilecli) {
           try {
             const raw = mobilecli && treeCmd === 'mobilecli dump ui'
-              ? await run(process.execPath, [mobilecli, 'dump', 'ui', '--device', serial])
+              ? await run(process.execPath, [mobilecli, 'dump', 'ui', '--device', mobilecliDevice||serial])
               : await sh(treeCmd);
             const nodes = parseTree(raw);
             if (nodes.length) {
@@ -119,6 +120,11 @@ export async function createRealDevice({ serial, treeCmd = 'mobilecli dump ui', 
     longpress: (x, y, ms = 900) => adb(['shell', 'input', 'swipe', String(x), String(y), String(x), String(y), String(ms)]),
     swipe: (x1, y1, x2, y2, ms = 350) => adb(['shell', 'input', 'swipe', ...[x1, y1, x2, y2, ms].map(String)]),
     text: (s) => adb(['shell', 'input', 'text', escapeInputText(s)]),
+    async adbCommand(args, timeoutMs) {
+      const timeout=adbTimeout(timeoutMs), command=adbTransportArgs(validateAdbArgs(args));
+      try { return await adb(command,{timeout}); }
+      catch { throw new Error('ADB command failed. Check its arguments, device connection and permissions.'); }
+    },
     async replaceText(x, y) {
       await dev.tap(x, y);
       // Select all in the focused editor, then delete; independent of text length.
@@ -212,6 +218,7 @@ export function createMockDevice(samplesDir) {
     async longpress() {},
     async swipe() {},
     async text() {},
+    async adbCommand(args, timeoutMs) {validateAdbArgs(args);adbTimeout(timeoutMs);return Buffer.from('Simulated ADB command; no connected device was used.');},
     async replaceText() {},
     async key(k) {
       if (String(k).toUpperCase() === 'BACK') screen = 'home';

@@ -14,6 +14,9 @@ import { acquireRecorderOwner } from './recorder-owner.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { observeCompletedAction } from './action-result.js';
 import { createDraftStore } from './draft-store.js';
+import { isEditableControl } from './input-controls.js';
+import { validateAdbArgs, adbTimeout } from '../public/adb-tools.js';
+import { captureEvidence } from './capture-evidence.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -31,6 +34,7 @@ const opts = {
   port: Number(opt('port', 'PORT', 4700)),
   pkg: opt('pkg', 'PKG', 'com.yourname.tradehub'),
   serial: opt('device', 'DEVICE', ''),
+  mobilecliDevice: opt('mobilecli-device','MOBILECLI_DEVICE',''),
   outDir: path.resolve(opt('out', 'OUT_DIR', path.join(ROOT, 'generated'))),
   treeCmd: opt('tree-cmd', 'TREE_CMD', 'mobilecli dump ui'),
   treeSource: opt('tree-source', 'TREE_SOURCE', 'auto'), // auto | mobilecli | uiautomator
@@ -82,7 +86,7 @@ async function getDevice() {
   if (device) return device;
   device = opts.mock
     ? createMockDevice(path.join(ROOT, 'samples'))
-    : await createRealDevice({ serial: opts.serial, treeCmd: opts.treeCmd, treeSource: opts.treeSource, mobilecli: localMobilecli(), log });
+    : await createRealDevice({ serial: opts.serial, mobilecliDevice:opts.mobilecliDevice, treeCmd: opts.treeCmd, treeSource: opts.treeSource, mobilecli: localMobilecli(), log });
   return device;
 }
 
@@ -138,19 +142,22 @@ async function capture(settledRaw) {
   const dev = await getDevice();
   const began=performance.now();
   try {
-  const [shot, raw, activity] = await Promise.allSettled([dev.screenshot(), settledRaw ?? readTree(dev), dev.activity ? dev.activity().catch(() => null) : null]).then((results) => {
-    const failure = results.find((r) => r.status === 'rejected');
-    if (failure) throw failure.reason;
-    return results.map((r) => r.value);
-  });
+  const {shot,raw,activity,capturedAt}=await captureEvidence(dev,settledRaw);
   const nodes = annotatedApp(raw);
   const size = pngSize(shot) || (await dev.size());
-  state = { nodes, size, raw, shot, activity, screenId: randomUUID(), captureMs: Math.round(performance.now()-began) };
+  state = { nodes, size, raw, shot, activity, capturedAt, screenId: randomUUID(), captureMs: Math.round(performance.now()-began) };
   return payload(shot, nodes, size, dev, activity);
   } catch(error) {
     state={...state,nodes:[],raw:[],invalid:true,screenId:randomUUID()};
     throw error;
   }
+}
+
+async function previewCapture(dev){
+  const began=performance.now(),shot=await dev.screenshot();
+  const size=pngSize(shot)||await dev.size();
+  state={...state,nodes:[],raw:[],shot,size,invalid:true,screenId:randomUUID()};
+  return {img:'data:image/png;base64,'+shot.toString('base64'),width:size.width,height:size.height,pkg:opts.pkg,device:dev.serial,source:'preview',nodes:[],screenId:state.screenId,previewOnly:true,capturedAt:new Date().toISOString(),captureMs:Math.round(performance.now()-began)};
 }
 
 const readTree = (dev) => dev.tree();
@@ -169,6 +176,7 @@ function payload(shot, nodes, size, dev, activity) {
     device: dev.serial,
     activity: activity || null,
     captureMs: state.captureMs,
+    capturedAt: state.capturedAt,
     appVisible: nodes.length > 0,
     nodes: nodes.map((n) => ({
       id: n.id,
@@ -212,23 +220,41 @@ async function settle(dev, maxMs = 8000) {
 async function action(body) {
   const dev = await getDevice();
   const began=performance.now();
-  if (state.invalid) throw Object.assign(new Error('The last screen capture failed. Refresh before recording another action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
+  if (state.invalid && body.kind!=='adb_command') throw Object.assign(new Error('The last screen capture failed. Refresh before recording another action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
   if (body.screenId && body.screenId !== state.screenId) throw Object.assign(new Error('The screen changed in another view. Refresh before recording this action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
   const before = state.nodes;
   const beforeShot = state.shot;
+  let commandOutput;
+  if(body.kind==='type_focused'){
+    if(!state.screenId||!body.screenId)throw Object.assign(new Error('Refresh before typing into the focused field.'),{httpStatus:409,code:'STALE_SCREEN'});
+    if(typeof body.text!=='string'||!body.text.length||body.text.length>4096||/[^\x20-\x7e]/.test(body.text))throw Object.assign(new Error('Quick type accepts 1–4096 printable ASCII characters; use Type on a field for other input.'),{httpStatus:400});
+  }
   if (['tap','doubletap','longpress','text','clear','swipe'].includes(body.kind)) {
     if (!state.screenId || !body.screenId) throw Object.assign(new Error('Refresh and supply the current screen before a device action.'),{httpStatus:409,code:'STALE_SCREEN'});
     if (![body.x,body.y].every(Number.isFinite) || body.x<0 || body.y<0 || body.x>=state.size.width || body.y>=state.size.height) throw Object.assign(new Error('The action coordinates are outside the captured screen.'),{httpStatus:400,code:'BAD_COORDINATES'});
   }
   switch (body.kind) {
+    case 'adb_command': {
+      let args;
+      let timeout;
+      try{args=validateAdbArgs(body.commandArgs);timeout=adbTimeout(body.timeoutMs);}catch(error){throw Object.assign(error,{httpStatus:400});}
+      const output=await dev.adbCommand(args,timeout);
+      const binary=output.includes(0)||output.subarray(1,4).toString()==='PNG';
+      commandOutput=binary?{binary:true,bytes:output.length,base64:output.length<=8*1024*1024?output.toString('base64'):null}:{binary:false,text:output.toString('utf8').slice(0,65536),truncated:output.length>65536};
+      break;
+    }
     case 'web': throw Object.assign(new Error('DOM recording is unavailable in this MobileWright recorder. Use exposed text/ID or explicit coordinates.'), { httpStatus: 422 });
+    case 'type_focused':
+      try { await dev.text(body.text); }
+      catch { throw new Error('Quick type failed. Check the ADB connection and focused input; the value has been omitted from this error.'); }
+      break;
     case 'tap': await dev.tap(body.x, body.y); break;
     case 'doubletap': await dev.doubletap(body.x, body.y); break;
     case 'longpress': await dev.longpress(body.x, body.y); break;
     case 'swipe': await dev.swipe(body.x, body.y, body.x2, body.y2, body.duration || 350); break;
     case 'text': {
       const input = state.nodes.find((n) => n.id === body.nodeId);
-      if (!input || input.visible===false || !/EditText|TextField/i.test(input.type) || !input.target?.parts || input.target.kind === 'coordinate' || input.target.viaAncestor) {
+      if (!input || input.visible===false || !isEditableControl(input) || !input.target?.parts || input.target.kind === 'coordinate' || input.target.viaAncestor) {
         throw new Error('Refresh and choose an editable field with a replayable locator before typing.');
       }
       await dev.replaceText(input.rect.x + input.rect.w / 2, input.rect.y + input.rect.h / 2);
@@ -249,6 +275,14 @@ async function action(body) {
     default: throw new Error('unknown action ' + body.kind);
   }
   const actionMs=Math.round(performance.now()-began);
+  if(body.previewAfter===true)return observeCompletedAction(async()=>{
+    await sleep(150);const preview=await previewCapture(dev);
+    return {actionCompleted:true,screen:null,preview,output:commandOutput,timings:{actionMs,captureMs:preview.captureMs,totalMs:Math.round(performance.now()-began),policy:'preview',stable:false}};
+  },()=>{state={...state,nodes:[],raw:[],invalid:true,screenId:randomUUID()};});
+  if(body.kind==='adb_command'&&body.captureAfter!==true){
+    state={...state,nodes:[],raw:[],invalid:true,screenId:randomUUID()};
+    return {actionCompleted:true,captureSkipped:true,screen:null,output:commandOutput,timings:{actionMs,captureMs:0,totalMs:Math.round(performance.now()-began),policy:'none',stable:false}};
+  }
   return observeCompletedAction(async () => {
     const policy=body.capturePolicy==='stable'?'stable':'fast';
     const observedAt=performance.now();
@@ -258,7 +292,7 @@ async function action(body) {
     const raw = ['swipe', 'scroll', 'hide_keyboard', 'checkpoint'].includes(body.kind) ? [] : suggest(before, state.nodes, state.size.height);
     const suggestions = vortex ? vortex.refineSuggestions(raw) : raw;
     const screenChange = vortex ? vortex.changeBetween(beforeShot, state.shot) : null;
-    return { screen, settleMs: Math.round(performance.now()-observedAt), suggestions, screenChange, timings:{actionMs,captureMs:screen.captureMs,totalMs:Math.round(performance.now()-began),policy,stable:settled?.stable??false} };
+    return { screen, ...(commandOutput?{output:commandOutput}:{}), settleMs: Math.round(performance.now()-observedAt), suggestions, screenChange, timings:{actionMs,captureMs:screen.captureMs,totalMs:Math.round(performance.now()-began),policy,stable:settled?.stable??false} };
   }, () => {
     state = { ...state, nodes: [], raw: [], screenId: randomUUID(), invalid: true };
   });
@@ -305,7 +339,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 501, { error: vortexUnavailable, code: 'UNAVAILABLE' });
     }
     // A recorder action must not drive the phone while a test run owns it.
-    if ((url.pathname === '/api/screen' || url.pathname === '/api/action') && vortex) {
+    if (['/api/screen','/api/action','/api/preview'].includes(url.pathname) && vortex) {
       try {
         vortex.assertDeviceFree(currentSerial());
       } catch (e) {
@@ -316,9 +350,17 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': MIME['.html'] });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', 'index.html')));
     }
+    if (req.method === 'GET' && url.pathname === '/input-controls.js') {
+      res.writeHead(200,{'Content-Type':MIME['.js'],'Cache-Control':'no-store'});
+      return res.end(fs.readFileSync(path.join(ROOT,'src','input-controls.js')));
+    }
     if (req.method === 'GET' && url.pathname === '/recording-tools.js') {
       res.writeHead(200,{'Content-Type':MIME['.js'],'Cache-Control':'no-store'});
       return res.end(fs.readFileSync(path.join(ROOT,'public','recording-tools.js')));
+    }
+    if(req.method==='GET'&&url.pathname==='/adb-tools.js'){
+      res.writeHead(200,{'Content-Type':MIME['.js'],'Cache-Control':'no-store'});
+      return res.end(fs.readFileSync(path.join(ROOT,'public','adb-tools.js')));
     }
     if (req.method === 'GET' && url.pathname === '/api/draft') return json(res,200,await draftLock(async()=>drafts.read()));
     if (req.method === 'POST' && url.pathname === '/api/draft') {
@@ -330,7 +372,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ...r, mock: opts.mock });
     }
     if (req.method === 'GET' && url.pathname === '/api/config') {
-      return json(res, 200, { version:VERSION, pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
+      return json(res, 200, { version:VERSION, features:{quickType:true,adbShortcuts:true,fastPreview:true}, pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       const b = await readBody(req);
@@ -345,6 +387,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { stopped: true });
     }
     if (req.method === 'GET' && url.pathname === '/api/screen') return json(res, 200, await withRecorder(() => capture()));
+    if(req.method==='POST'&&url.pathname==='/api/preview')return json(res,200,await withRecorder(async()=>previewCapture(await getDevice())));
     if (req.method === 'POST' && url.pathname === '/api/action') {
       const body = await readBody(req);
       return json(res, 200, await withRecorder(() => action(body)));

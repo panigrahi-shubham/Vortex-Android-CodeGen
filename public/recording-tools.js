@@ -1,4 +1,5 @@
 // Shared, side-effect-free recording edits and review rules. No device commands live here.
+import { validateAdbArgs, adbTimeout } from './adb-tools.js';
 const copy = value => structuredClone(value);
 const TYPES = new Set(['id','label','text','type','scoped','css','xpath']);
 export function locatorExpression(parts,base='screen') {
@@ -26,8 +27,15 @@ export function editStep(list, index, patch) {
   const next=copy(list), step=next[index];
   if (patch.title !== undefined) step.title=String(patch.title);
   if (patch.comment !== undefined) step.comment=String(patch.comment);
+  if(patch.commandArgs!==undefined||patch.timeoutMs!==undefined){
+    if(step.type!=='adb_command')throw Error('ADB arguments and timeout can only be edited on an ADB step.');
+    const args=validateAdbArgs(patch.commandArgs??step.args?.commandArgs);
+    let secretIndex=step.args?.secretIndex;
+    if(step.secretEnv){const positions=args.flatMap((value,i)=>value==='<secret>'?[i]:[]);if(positions.length!==1)throw Error('Keep exactly one <secret> argument; the replay reads its value from the environment.');secretIndex=positions[0];}
+    step.args={...step.args,commandArgs:args,timeoutMs:adbTimeout(patch.timeoutMs??step.args?.timeoutMs),...(step.secretEnv?{secretIndex}:{})};
+  }
   if (patch.text !== undefined) {
-    if (step.type !== 'type' || step.secretEnv) throw Error('Sensitive input uses its environment variable. Clear text cannot be stored here.');
+    if (!['type','type_focused'].includes(step.type) || step.secretEnv) throw Error('Sensitive input uses its environment variable. Clear text cannot be stored here.');
     step.args={...step.args,text:String(patch.text)};
   }
   if (patch.expected !== undefined) {
@@ -70,6 +78,8 @@ export function ambiguousHit(nodes,candidates) {
 export function reviewRecording(steps) {
   const issues=[];
   steps.forEach((s,i)=>{
+    if(s.type==='type_focused')issues.push({step:i+1,code:'FOCUSED_INPUT',message:'Quick type appends to the focused input. Verify focus and add a result assertion; OTP values must be fresh for each run.'});
+    if(s.type==='adb_command')issues.push({step:i+1,code:'ADB_COMMAND',message:'This step runs the recorded ADB arguments on the selected device. Add an assertion for the intended result.'});
     const coordinate=s.target?.kind==='coordinate'||s.mode==='coord';
     if(coordinate){
       const before=steps[i-1], after=steps[i+1];
@@ -84,6 +94,13 @@ export function reviewRecording(steps) {
 }
 export function safeDraft(data) {
   const draft=copy(data);
-  for(const s of draft.steps||[])if(s.secretEnv){s.args={...s.args};delete s.args.text;if(s.target?.evidence)s.target.evidence.text='';}
+  for(const s of draft.steps||[])if(s.secretEnv){
+    s.args={...s.args};delete s.args.text;
+    if(s.type==='adb_command'&&Array.isArray(s.args.commandArgs)){
+      const index=s.args.secretIndex, valid=Number.isInteger(index)&&index>=0&&index<s.args.commandArgs.length;
+      s.args.commandArgs=s.args.commandArgs.map((value,i)=>!valid||i===index?'<secret>':value);
+    }
+    if(s.target?.evidence)s.target.evidence.text='';
+  }
   return draft;
 }

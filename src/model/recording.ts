@@ -11,10 +11,10 @@ export const RECORDING_SCHEMA = 'vortex.recording';
 export const RECORDING_VERSION = 1;
 
 export type ActionType =
-  | 'tap' | 'longpress' | 'doubletap' | 'swipe' | 'type' | 'scroll_to' | 'press' | 'wait_visible' | 'wait_hidden' | 'sleep' | 'assert'
+  | 'tap' | 'longpress' | 'doubletap' | 'swipe' | 'type' | 'type_focused' | 'adb_command' | 'scroll_to' | 'press' | 'wait_visible' | 'wait_hidden' | 'sleep' | 'assert'
   // Milestone 5
   | 'clear' | 'hide_keyboard' | 'launch_app' | 'close_app' | 'deep_link' | 'wait_enabled' | 'check_activity' | 'checkpoint';
-export const ACTION_TYPES: ActionType[] = ['tap', 'longpress', 'doubletap', 'swipe', 'type', 'scroll_to', 'press', 'wait_visible', 'wait_hidden', 'sleep', 'assert', 'clear', 'hide_keyboard', 'launch_app', 'close_app', 'deep_link', 'wait_enabled', 'check_activity', 'checkpoint'];
+export const ACTION_TYPES: ActionType[] = ['tap', 'longpress', 'doubletap', 'swipe', 'type', 'type_focused', 'adb_command', 'scroll_to', 'press', 'wait_visible', 'wait_hidden', 'sleep', 'assert', 'clear', 'hide_keyboard', 'launch_app', 'close_app', 'deep_link', 'wait_enabled', 'check_activity', 'checkpoint'];
 /** Steps that act on an element and therefore need a locator. */
 export const NEEDS_TARGET: ActionType[] = ['tap', 'longpress', 'doubletap', 'type', 'scroll_to', 'wait_visible', 'wait_hidden', 'assert', 'clear', 'wait_enabled'];
 export type AssertionKind = 'visible' | 'hidden' | 'enabled' | 'disabled' | 'text' | 'contains' | 'checked' | 'unchecked' | 'selected' | 'unselected' | 'count';
@@ -105,6 +105,10 @@ export interface RecordedEvent {
     activity?: string;
     /** checkpoint: picture name */
     name?: string;
+    /** Logical ADB argv, excluding adb and device-selection options. */
+    commandArgs?: string[];
+    secretIndex?: number;
+    timeoutMs?: number;
   };
   target: EventTarget | null;
   /** Where the user clicked; used by coordinate fallback. */
@@ -228,6 +232,12 @@ export function fromUiSteps(steps: UiStep[], meta: RecordingMeta): Recording {
       screenAfter: st.screenAfter ?? null,
       action: {
         type: st.type as ActionType,
+        ...(st.type==='adb_command'?{commandArgs: (()=>{
+          if(!Array.isArray(a.commandArgs)||!a.commandArgs.length||a.commandArgs.length>128||a.commandArgs.some(v=>typeof v!=='string'||v.includes('\0')||v.length>16384)||String(a.commandArgs[0]).startsWith('-'))throw new RecordingError(`step ${i+1}: invalid ADB arguments`);
+          const args=[...a.commandArgs] as string[];
+          if(secretEnv){const index=Number(a.secretIndex);if(!Number.isInteger(index)||index<0||index>=args.length)throw new RecordingError(`step ${i+1}: choose the sensitive argument index`);args[index]='<secret>';}
+          return args;
+        })(),timeoutMs:(()=>{const value=Number(a.timeoutMs??15000);if(!Number.isInteger(value)||value<1000||value>300000)throw new RecordingError(`step ${i+1}: ADB timeout must be 1000–300000 ms`);return value;})(),...(secretEnv?{secretIndex:Number(a.secretIndex)}:{})}:{}),
         ...(a.key !== undefined ? { key: String(a.key).toUpperCase() } : {}),
         ...(a.direction !== undefined ? { direction: a.direction as RecordedEvent['action']['direction'] } : {}),
         ...(a.distance !== undefined ? { distance: Number(a.distance) } : {}),
@@ -253,7 +263,7 @@ export function fromUiSteps(steps: UiStep[], meta: RecordingMeta): Recording {
       position: Number.isFinite(st.x) && Number.isFinite(st.y) ? { x: st.x!, y: st.y! } : null,
       tapStyle: st.context === 'WEBVIEW' ? 'name' : st.mode ?? (t?.kind === 'coordinate' ? 'coord' : 'both'),
       preCheck: st.pre !== false,
-      input: st.type === 'type' ? (secretEnv ? { secretEnv, ...(st.dataKey ? { dataKey: st.dataKey } : {}) } : { text: String(a.text ?? ''), ...(st.dataKey ? { dataKey: st.dataKey } : {}) }) : null,
+      input: ['type','type_focused'].includes(st.type)||st.type==='adb_command'&&secretEnv ? (secretEnv ? { secretEnv, ...(st.dataKey ? { dataKey: st.dataKey } : {}) } : { text: String(a.text ?? ''), ...(st.dataKey ? { dataKey: st.dataKey } : {}) }) : null,
       check: st.type === 'assert' ? { kind: String(a.assertion) as AssertionKind, ...(a.expected !== undefined ? { expected: a.expected as string | number } : {}) } : null,
       post: accepted.map((s) => toAssertion(s, 'suggested')),
       suggestions: rejected.map((s) => toAssertion(s, 'suggested')),
@@ -285,6 +295,9 @@ export function toUiSteps(rec: Recording): UiStep[] {
   return rec.events.map((e) => {
     const a = e.action;
     const args: Record<string, unknown> = {};
+    if(a.commandArgs)args.commandArgs=[...a.commandArgs];
+    if(a.secretIndex!==undefined)args.secretIndex=a.secretIndex;
+    if(a.timeoutMs!==undefined)args.timeoutMs=a.timeoutMs;
     if (a.key) args.key = a.key;
     if (a.direction) args.direction = a.direction;
     if (a.distance !== undefined) args.distance = a.distance;

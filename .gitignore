@@ -5,6 +5,7 @@ generated/
 dist/
 vortex.config.cmd
 .vortex-bench/
+.vortex-ci/
 .env
 .env.*
 !.env.example

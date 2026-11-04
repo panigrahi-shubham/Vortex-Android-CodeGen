@@ -155,6 +155,7 @@ function stepLines(st, n, used, size, helper) {
 }
 
 export function generate(steps, { name = 'recorded flow', bundleId = 'com.yourname.tradehub', size } = {}) {
+  if(steps.some(step=>['type_focused','adb_command'].includes(step.type)))throw new Error('Quick type and ADB commands require MobileWright Plain or POM output. Select MobileWright (TypeScript) instead of the legacy format.');
   const used = new Set();
   const helper = { used: false };
   const body = [];

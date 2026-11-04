@@ -14,6 +14,7 @@
 import { afterScreen, camel, dataKey, PageRegistry, pascal, type MethodKind, type PagePlan, type PageLocator } from '../../model/pages.ts';
 import { describeEvent, isCoordinateEvent, swipeGeometry, type GeneratedFile, type GenerationIssue } from '../../model/output.ts';
 import type { AssertionKind, LocatorParts, RecordedEvent, Recording, WebViewRef } from '../../model/recording.ts';
+import { validateAdbArgs, adbTransportArgs, adbTimeout } from '../../../public/adb-tools.js';
 
 export const MW_FORMAT = 'vortex-mobilewright v2';
 export const MW_VERIFIED_WITH = '@mobilewright/test 0.0.66';
@@ -104,7 +105,7 @@ interface Ctx {
   size: { width: number; height: number } | null;
   issues: GenerationIssue[];
   variant: 'plain' | 'pom';
-  uses: Set<'tapOrAt' | 'secret' | 'sleep' | 'webLocator' | 'coordinateGuard'>;
+  uses: Set<'tapOrAt' | 'secret' | 'sleep' | 'webLocator' | 'coordinateGuard' | 'adbCommand'>;
   /** The spec uses `id(...)` outside page objects (WebView selection by resource-id). */
   usesId?: boolean;
 }
@@ -227,6 +228,23 @@ function eventLines(e: RecordedEvent, ctx: Ctx, S: Style): string[] {
       out.push(S.act('fill', scr, parts!, e.title, { checkFirst: e.preCheck, fallback: null, value: S.value(e, scr, parts!, e.title) }));
       break;
     }
+    case 'adb_command': {
+      let args:string[];
+      let timeout:number;
+      try{args=validateAdbArgs(a.commandArgs);timeout=adbTimeout(a.timeoutMs);}catch{issue('invalid ADB command arguments or timeout');break;}
+      if(e.input?.secretEnv&&(!Number.isInteger(a.secretIndex)||a.secretIndex!<0||a.secretIndex!>=args.length)){issue('invalid sensitive ADB argument index');break;}
+      ctx.uses.add('adbCommand');
+      if(e.input?.secretEnv)ctx.uses.add('secret');
+      const secretArgs=(e.input?.secretEnv?`, ${a.secretIndex}, ${S.value(e,scr,{by:'type',value:'adb command'},e.title)}`:timeout!==15000?', undefined, undefined':'')+(timeout!==15000?`, ${timeout}`:'');
+      out.push(`await adbCommand(${JSON.stringify(args)}${secretArgs});`);
+      break;
+    }
+    case 'type_focused': {
+      if (e.input?.secretEnv) ctx.uses.add('secret');
+      out.push('// Appends to the focused field. Focus the intended input before this step.');
+      out.push(`await device.driver.typeText(${S.value(e, scr, {by:'type',value:'focused input'}, e.title)});`);
+      break;
+    }
     case 'swipe': {
       const g = swipeGeometry(e);
       if (g) {
@@ -335,7 +353,7 @@ function body(rec: Recording, ctx: Ctx, S: Style): string[] {
     const key = webKey(evs[k]);
     if (!key) {
       for (const l of eventLines(evs[k], ctx, S).flatMap((x) => x.split('\n'))) {
-        if (lines[lines.length - 1] === l && !l.startsWith('//')) continue; // identical consecutive checks
+        if (lines[lines.length - 1] === l && l.startsWith('await expect(')) continue; // identical consecutive checks only
         lines.push(l);
       }
       k++;
@@ -388,6 +406,28 @@ const SECRET = [
   '  const value = process.env[name];',
   "  if (!value) throw new Error(`Set the ${name} environment variable: this test types a sensitive value that Vortex does not store.`);",
   '  return value;',
+  '}',
+];
+
+const ADB_HELPER = [
+  "import { execFile } from 'node:child_process';",
+  "import { promisify } from 'node:util';",
+  'const execAdb = promisify(execFile);',
+  adbTransportArgs.toString().replace('(args)', '(args: string[]): string[]').replace('value =>','(value: string) =>'),
+  'async function adbCommand(args: string[], secretIndex?: number, secretValue?: string, timeoutMs = 15000): Promise<void> {',
+  '  if (process.env.VORTEX_SIMULATED_ADB === "1") throw new Error("Raw ADB commands require a real selected device; simulated replay never contacts hardware.");',
+  '  const serial = process.env.VORTEX_ADB_SERIAL;',
+  '  if (!serial || !/^[A-Za-z0-9_.:@-]+$/.test(serial)) throw new Error("Set VORTEX_ADB_SERIAL to the selected Android transport serial before replay.");',
+  '  const command = [...args];',
+  '  if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 300000) throw new Error("ADB timeout must be 1000–300000 milliseconds.");',
+  '  if (secretIndex !== undefined) {',
+  '    if (!Number.isInteger(secretIndex) || secretIndex < 0 || secretIndex >= command.length || secretValue === undefined) throw new Error("Invalid sensitive ADB argument.");',
+  '    command[secretIndex] = secretValue;',
+  '  }',
+  '  try {',
+  '    const { stdout } = await execAdb("adb", ["-s", serial, ...adbTransportArgs(command)], { windowsHide: true, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, encoding: "buffer" });',
+  '    if (stdout.length) await test.info().attach("ADB output", { body: stdout, contentType: "application/octet-stream" });',
+  '  } catch { throw new Error("ADB command failed. Check its arguments, device connection and permissions."); }',
   '}',
 ];
 
@@ -448,6 +488,7 @@ export function generateMobilewrightPlain(rec: Recording, o: MwOptions): { files
   if (ctx.uses.has('coordinateGuard')) out.push(...coordinateGuard(o.size), '');
   if (ctx.uses.has('secret')) out.push(...SECRET, '');
   if (ctx.uses.has('webLocator')) out.push(...WEB_LOCATOR, '');
+  if (ctx.uses.has('adbCommand')) out.push(...ADB_HELPER, '');
   out.push(`test(${ts(rec.name)}, async ({ device, screen }) => {`);
   if(rec.events[0]?.action.type!=='launch_app')out.push('  await device.launchApp(bundleId);');
   out.push('  let appClosed = false;', '  try {');
@@ -497,8 +538,8 @@ export function generateMobilewrightPom(rec: Recording, o: MwOptions): { files: 
       return `await ${pageVar(page)}.${m}(${args.join(', ')});`;
     },
     value: (e, screen, parts, title) => {
-      const { loc } = reg.locator(screen, parts, title);
-      const key = dataKey(e, loc.words, data);
+      const words = ['type_focused','adb_command'].includes(e.action.type) ? ['focused','input'] : reg.locator(screen, parts, title).loc.words;
+      const key = dataKey(e, words, data);
       if (!dataValues.some((d) => d.key === key)) dataValues.push({ key, ...(e.input?.secretEnv ? { secretEnv: e.input.secretEnv } : { text: e.input?.text ?? '' }) });
       return e.input?.secretEnv ? `secrets.${camel(key.split('_'))}()` : `data.${camel(key.split('_'))}`;
     },
@@ -664,6 +705,7 @@ export function generateMobilewrightPom(rec: Recording, o: MwOptions): { files: 
   const dataNames = [hasData ? 'data' : '', hasSecrets ? 'secrets' : ''].filter(Boolean);
   if (dataNames.length) imports.push(`import { ${dataNames.join(', ')} } from '../${dataFile}';`);
   const spec = [...header(rec, 'POM', o.size), ...imports, '', 'test.use({ autoAppLaunch: false });', ''];
+  if(ctx.uses.has('adbCommand'))spec.push(...ADB_HELPER,'');
   const fixtures = ['device', 'screen', ...used.map(pageVar)];
   spec.push(...(b.some(l=>l.includes('assertCoordinateScreen(screen)'))?[`import { assertCoordinateScreen } from '../pages/app';`,'']:[]));
   spec.push(`test(${ts(rec.name)}, async ({ ${fixtures.join(', ')} }) => {`);

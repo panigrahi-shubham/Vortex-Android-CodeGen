@@ -10,6 +10,9 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      VORTEX_MOBILEWRIGHT_DIR: ${{ github.workspace }}/.vortex-ci
+      VORTEX_PLAYWRIGHT: ${{ github.workspace }}/.vortex-ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,7 +20,9 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: npm install --prefix .vortex-ci --no-save @mobilewright/test@0.0.66
+      - run: node .vortex-ci/node_modules/playwright/cli.js install --with-deps chromium
       - run: npm test
       - run: npm run typecheck
-      - run: node --test test/integration/mobilewright-only.test.ts test/integration/package-windows.test.ts test/integration/v1-recorder.test.ts
+      - run: npm run test:integration
       - run: npm run package:windows

@@ -145,6 +145,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
   <span id="wvBadge" class="badge warn" style="display:none" title="Web page content is only as detailed as the app exposes it"></span>
   <label>Package <input id="pkg" type="text" value=""></label>
   <button id="btnRefresh">Refresh screen</button>
+  <button id="btnPreview" title="Screenshot only; refresh the hierarchy before selecting controls">Quick preview</button>
   <span id="busy"></span>
   <span style="flex:1"></span>
   <button id="btnRuns" class="hbtn" title="Saved test cases: reopen and run with MobileWright">Project &amp; runs</button>
@@ -152,6 +153,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
   <button id="btnTools" class="hbtn" title="Inspect controls, devices, benchmarks, setup check">Tools &#9662;</button>
   <button id="btnHelp" class="hbtn" title="How to use the recorder, keyboard shortcuts (?)">?</button>
   <button id="btnInspector" class="hbtn">Inspect controls</button>
+  <button id="btnAdb" class="hbtn">ADB shortcuts</button>
   <button id="btnDevices" class="hbtn" style="display:none">Devices</button>
 </header>
 <nav id="guide" aria-label="Steps">
@@ -161,8 +163,8 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
 </nav>
 <div id="restoreBanner" class="banner"><span id="restoreText"></span><button id="btnRestore" class="primary">Restore steps</button><button id="btnDiscard">Discard</button></div>
 <div id="discBanner" class="banner err"></div>
-<div class="row" style="padding:6px 20px"><span class="badge">MobileWright 1.0 RC</span><label>Capture <select id="capturePolicy"><option value="fast">Fast · one fresh capture</option><option value="stable">Stable · compare consecutive trees</option></select></label><span id="captureTiming" class="mut"></span><span id="draftStatus" class="mut" role="status"></span></div>
-<dialog id="stepEditor" style="width:min(650px,95vw)"><h3>Edit recorded step</h3><form id="stepEditForm"><label>Title<input id="editTitle" style="width:100%"></label><p id="editInputRow"><label>Replacement input text<input id="editText" style="width:100%"></label></p><p id="editExpectedRow"><label>Expected assertion value<input id="editExpected" style="width:100%"></label></p><p id="editWaitRow"><label>Wait (milliseconds)<input id="editWait" type="number" min="0" max="300000"></label></p><p><label>Comment<input id="editComment" style="width:100%"></label></p><details><summary>Advanced: recorded locator</summary><p class="mut">ID, label, text, type or scoped locator parts. These edits affect replay; they never act on the phone.</p><textarea id="editLocator" rows="5" style="width:100%;font-family:monospace"></textarea></details><p class="row"><button type="submit" class="primary">Apply changes</button><button type="button" id="editCancel">Cancel</button></p><p id="editError" class="warn" role="alert"></p></form></dialog>
+<div class="row" style="padding:6px 20px"><span class="badge">MobileWright 2.0 beta</span><label>Capture <select id="capturePolicy"><option value="fast">Fast · one fresh capture</option><option value="stable">Stable · compare consecutive trees</option></select></label><span id="captureTiming" class="mut"></span><span id="draftStatus" class="mut" role="status"></span></div>
+<dialog id="stepEditor" style="width:min(650px,95vw)"><h3>Edit recorded step</h3><form id="stepEditForm"><label>Title<input id="editTitle" style="width:100%"></label><p id="editInputRow"><label>Replacement input text<input id="editText" style="width:100%"></label></p><p id="editExpectedRow"><label>Expected assertion value<input id="editExpected" style="width:100%"></label></p><p id="editWaitRow"><label>Wait (milliseconds)<input id="editWait" type="number" min="0" max="300000"></label></p><p><label>Comment<input id="editComment" style="width:100%"></label></p><div id="editAdbRow" hidden><label>ADB arguments (JSON array)<textarea id="editAdbArgs" rows="5" style="width:100%"></textarea></label><p class="mut">Keep &lt;secret&gt; in the sensitive argument slot; its value comes from the environment.</p><label>Command timeout (seconds)<input id="editAdbTimeout" type="number" min="1" max="300"></label></div><details><summary>Advanced: recorded locator</summary><p class="mut">ID, label, text, type or scoped locator parts. These edits affect replay; they never act on the phone.</p><textarea id="editLocator" rows="5" style="width:100%;font-family:monospace"></textarea></details><p class="row"><button type="submit" class="primary">Apply changes</button><button type="button" id="editCancel">Cancel</button></p><p id="editError" class="warn" role="alert"></p></form></dialog>
 
 <main>
   <div class="col">
@@ -182,6 +184,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
     <div id="info" class="panel">Inspect a screen point or search the controls below. Inspection does not tap the device.</div>
     <details id="inspectPanel" class="panel" open>
       <summary><b>Inspect controls</b> <span id="inspectCount" class="mut"></span></summary>
+      <label class="row">Copy when selected <select id="inspectAutoCopy"><option value="none">Off</option><option value="locator">Locator</option><option value="id">Resource ID</option><option value="text">Text</option><option value="adb">ADB tap command</option></select></label>
       <label class="row" style="margin-top:8px"><span class="mut">Search</span><input id="inspectSearch" type="search" placeholder="Text, label, ID or class" style="flex:1;min-width:100px"></label>
       <div id="inspectList" style="max-height:150px;overflow:auto;display:flex;flex-direction:column;gap:4px"></div>
       <div id="inspectDetail" class="note" style="margin-top:8px">Refresh, then select a control or a point on the phone.</div>
@@ -221,7 +224,9 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
       </select></label>
     </div>
     <div class="row">
-      <button id="btnCopy">Copy file</button>
+      <button id="btnCopy">Copy current file</button>
+      <button id="btnCopyScript">Copy script</button>
+      <button id="btnCopyAll">Copy all files</button>
       <button id="btnSave" class="primary">Save to project</button>
       <span id="saveWhere" class="mut" style="font-size:12px"></span>
     </div>
@@ -315,9 +320,25 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
     <label for="textInputValue" id="textInputLabel">Text to type</label>
     <input id="textInputValue" type="text" autocomplete="off" style="width:100%">
     <p id="textInputHint" class="mut"></p>
+    <p id="quickPreviewRow" hidden><label><input id="quickPreview" type="checkbox" checked> Fast screenshot preview; refresh controls afterward</label></p>
     <div class="row"><button value="cancel" formnovalidate>Cancel</button><button value="submit" class="primary">Type on phone</button></div>
   </form>
 </dialog>
+
+<dialog id="adbDlg" class="wide" aria-labelledby="adbTitle"><div class="dlg">
+  <div class="dlg-hd"><h2 id="adbTitle">ADB shortcuts</h2><button data-close>Close</button></div>
+  <label>Shortcut <select id="adbPreset"></select></label>
+  <p id="adbTextRow"><label>Text for the focused input <input id="adbText" type="password" autocomplete="off" style="width:100%"></label></p>
+  <p id="adbCommandRow"><label>Command or JSON arguments<textarea id="adbCommand" rows="4" style="width:100%" spellcheck="false"></textarea></label></p>
+  <p><label><input id="adbSensitive" type="checkbox"> Last argument is sensitive: use an environment variable in the script</label></p>
+  <p><label>Environment variable <input id="adbEnv" value="VORTEX_SECRET_ADB_TEXT" style="width:280px"></label></p>
+  <p><label>After command <select id="adbCapture"><option value="none">No capture · fastest</option><option value="preview">Screenshot preview only</option><option value="full">Full screenshot and controls</option></select></label></p>
+  <p><label>Command timeout (seconds) <input id="adbTimeout" type="number" min="1" max="300" value="15" style="width:90px"></label> <small class="mut">Refresh controls after a skipped capture or screenshot-only preview.</small></p>
+  <div class="row"><button id="adbRun">Run only</button><button id="adbAdd">Add to script</button><button id="adbRunRecord" class="primary">Run &amp; record</button><button id="adbCopy">Copy ADB command</button><button id="adbCopyStep">Copy script step</button></div>
+  <p id="adbStatus" role="status"></p><pre id="adbOutput" style="max-height:240px;overflow:auto;white-space:pre-wrap"></pre><div id="adbBinary"></div>
+  <small class="mut">Type appends to the focused field. Custom shell pipelines can use <code>shell sh -c "your command"</code>. Commands use the selected device.</small>
+</div></dialog>
+<dialog id="copyDlg"><div class="dlg"><h2>Copy text</h2><textarea id="copyValue" readonly rows="12" style="width:100%"></textarea><p>Press Ctrl+C to copy.</p><button data-close>Close</button></div></dialog>
 
 <dialog id="helpDlg" aria-labelledby="helpTitle">
   <div class="dlg">
@@ -337,6 +358,8 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
 
 <script type="module">
 import { editStep, moveStep, duplicateStep, hitCandidates, ambiguousHit, reviewRecording, safeDraft } from '/recording-tools.js';
+import { findEditableInput } from '/input-controls.js';
+import { ADB_PRESETS, parseAdbCommand, formatAdbCommand } from '/adb-tools.js';
 const $ = (s) => document.querySelector(s);
 const MODES = [
   ['tap', 'Tap'], ['longpress', 'Long-press'], ['doubletap', 'Double-tap'], ['swipe', 'Swipe'],
@@ -361,6 +384,11 @@ function toast(msg, err) {
   t.textContent = msg; t.className = err ? 'err' : ''; t.style.display = 'block';
   clearTimeout(toast.t); toast.t = setTimeout(() => (t.style.display = 'none'), err ? 7000 : 2500);
 }
+async function copyText(value,label='Copied'){
+  if(!value)return toast('Nothing to copy yet.',true);
+  try{await navigator.clipboard.writeText(value);toast(label);}
+  catch{$('#copyValue').value=value;$('#copyDlg').showModal();$('#copyValue').focus();$('#copyValue').select();}
+}
 const disabledBeforeBusy=new WeakMap();
 function setBusy(b, msg) {
   busy = b; $('#busy').textContent = b ? (msg || 'Working...') : '';
@@ -383,6 +411,8 @@ const MODE_KEYS = { tap: 't', type: 'y', assert: 'a', wait: 'w', swipe: 's', scr
 function buildToolbar() {
   const cur = MODES.find(([k]) => k === mode && !PRIMARY.includes(k));
   $('#toolbar').innerHTML = MODES.filter(([k]) => PRIMARY.includes(k)).map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}" title="${l} (${MODE_KEYS[k].toUpperCase()})">${l}</button>`).join('') +
+    `<button id="modeKeypad" class="${mode === 'tap' && $('#tapStyle').value === 'coord' ? 'on' : ''}" title="Tap the visible keyboard using exact screen positions">Keypad taps</button>` +
+    `<button id="modeQuickType" title="Send the whole value to the already focused field with one capture">Quick type</button>` +
     `<button id="modeMore" class="${cur ? 'on' : ''}" title="Long-press, double-tap, clear text, inspect">${cur ? cur[1] : 'More'} &#9662;</button>`;
 }
 function popMenu(ev, title, items) {
@@ -394,6 +424,11 @@ function popMenu(ev, title, items) {
   m._items = items;
 }
 $('#toolbar').addEventListener('click', (e) => {
+  if(e.target.closest('#modeQuickType'))return quickType();
+  if (e.target.closest('#modeKeypad')) {
+    $('#tapStyle').value='coord';setMode('tap');
+    return toast('Keypad taps: click each visible key. Uses screen coordinates; wait for each capture before the next key.');
+  }
   if (e.target.closest('#modeMore')) return popMenu(e, 'More actions', MODES.filter(([k]) => !PRIMARY.includes(k)).map(([k, l]) => [`${l}  (${MODE_KEYS[k].toUpperCase()})`, () => setMode(k)]));
   const b = e.target.closest('button[data-mode]');
   if (b) setMode(b.dataset.mode);
@@ -426,10 +461,10 @@ function render() {
   const wv = S.nodes.filter((n) => /WebView/.test(n.type)).length;
   $('#wvBadge').textContent = wv ? 'WebView on screen (' + wv + ')' : '';
   $('#wvBadge').style.display = wv ? '' : 'none';
-  $('#webStatus').textContent = S.stale ? 'Screen capture failed. Refresh before recording.' : wv ? 'WebView: inspect exposed text and IDs below. Unexposed content can use an explicit coordinate tap.' : 'Text / ID / accessibility locators from the captured screen';
+  $('#webStatus').textContent = S.previewOnly ? 'Screenshot preview only. Refresh screen to inspect current controls.' : S.stale ? 'Screen capture failed. Refresh before recording.' : wv ? 'WebView: inspect exposed text and IDs below. Unexposed content can use an explicit coordinate tap.' : 'Text / ID / accessibility locators from the captured screen';
   if (S.pkgChangedFrom) toast('Package changed from ' + S.pkgChangedFrom + ' to ' + S.pkg + ' (the app that is on screen).');
   if (document.activeElement !== $('#pkg')) $('#pkg').value = S.pkg;
-  if (!S.appVisible) toast('The app "' + S.pkg + '" is not on screen. Open it on the phone, or fix the Package field, then Refresh.', true);
+  if (!S.appVisible && !S.previewOnly) toast('The app "' + S.pkg + '" is not on screen. Open it on the phone, or fix the Package field, then Refresh.', true);
   resetInspection();
   drawBoxes(null, null);
   const available = Math.max(320, Math.min(window.innerHeight - $('#phone').getBoundingClientRect().top - 16, 860));
@@ -510,7 +545,7 @@ function selectInspection(n, point) {
   const rows = [['Source','Captured accessibility tree'], ['Text',n?.text || 'Not exposed'], ['Accessibility label',n?.label || 'Not exposed'], ['Resource ID',n?.identifier || 'Not exposed'], ['Class',n?.type || 'No exposed element'], ['Bounds',n ? `x ${n.rect.x}, y ${n.rect.y}, ${n.rect.w} × ${n.rect.h}` : 'Point only'], ['Center',n ? pointText(center(n)) : '—'], ['Selected point',pointText(at)], ['Screen percentage',percentText(at)], ['Enabled',n?.enabled === undefined ? 'Not exposed' : String(n.enabled)], ['Checked',n?.checked == null ? 'Not exposed' : String(n.checked)], ['Selected',n?.selected == null ? 'Not exposed' : String(n.selected)]];
   const options = INSPECT.choices.map((o,i) => `<option value="${i}">${esc(o.kind)} · ${esc(o.note || '')}</option>`).join('');
   $('#inspectDetail').innerHTML = `<dl class="kv">${rows.map(([k,v]) => `<dt>${esc(k)}</dt><dd style="overflow-wrap:anywhere">${esc(v)}</dd>`).join('')}</dl>` +
-    `<div class="row"><button data-ins-copy="point">Copy pixels</button><button data-ins-copy="percent">Copy %</button>${n?.text ? '<button data-ins-copy="text">Copy text</button>' : ''}</div>` +
+    `<div class="row"><button data-ins-copy="point">Copy pixels</button><button data-ins-copy="percent">Copy %</button>${n?.text ? '<button data-ins-copy="text">Copy text</button>' : ''}${n?.identifier?'<button data-ins-copy="id">Copy ID</button>':''}${n?'<button data-ins-copy="class">Copy class</button><button data-ins-copy="details">Copy details</button>':''}<button data-ins-copy="adb">Copy ADB tap</button><button data-ins-copy="tap">Copy tap step</button></div>` +
     (options ? `<label class="row">Locator <select id="inspectChoice" style="max-width:100%">${options}</select></label><code id="inspectExpr" style="display:block;overflow-wrap:anywhere"></code><div class="row"><button data-ins-action="test">Highlight matches</button><button data-ins-copy="locator">Copy locator</button><button data-ins-action="use">Use for recording</button></div><p id="inspectMatch" class="mut"></p>` : '<p class="warn">No semantic locator is exposed for this target. Coordinate taps depend on the screen layout.</p>') +
     `<div class="row"><button data-ins-action="tap" ${n?.target?.expr&&n.visible!==false ? '' : 'disabled'}>Record tap</button><button data-ins-action="type" ${n&&n.visible!==false&&findInput(n)?.target?.expr ? '' : 'disabled'}>Record type</button><button data-ins-action="point">Record coordinate tap</button><button data-ins-action="assert" ${n?.target?.expr ? '' : 'disabled'}>Add assertion</button></div>` +
     '<small class="mut">WebView text is available only when the app exposes it. Match counts describe this captured tree, not a live replay check.</small>';
@@ -523,7 +558,20 @@ function selectInspection(n, point) {
     select.value=String(n?.id);select.onchange=()=>selectInspection(S.nodes.find(x=>x.id===Number(select.value)),at);chooser.append(select);$('#inspectDetail').prepend(chooser);
     if(ambiguousHit(S.nodes,overlaps))chooser.insertAdjacentHTML('afterend','<p class="warn">Overlapping controls are exposed. Choose the intended control and review its highlight before recording an action.</p>');
   }
+  const auto=$('#inspectAutoCopy').value;
+  if(auto!=='none')copyInspection(auto);
 }
+function copyInspection(kind){
+  if(!INSPECT)return;
+  const n=selectedNode(),choice=INSPECT.choices[INSPECT.choice],p=INSPECT.point;
+  const values={point:pointText(p),percent:percentText(p),text:n?.text,id:n?.identifier,class:n?.type,locator:choice?.expr,
+    details:n?JSON.stringify({text:n.text,label:n.label,id:n.identifier,class:n.type,bounds:n.rect,locator:choice?.expr},null,2):null,
+    adb:formatAdbCommand(['shell','input','tap',String(p.x),String(p.y)],S.device),
+    tap:choice?.expr?`await ${choice.expr}.tap();`:`await screen.tap(${p.x}, ${p.y});`};
+  return copyText(values[kind],'Copied '+kind);
+}
+$('#inspectAutoCopy').value=localStorage.getItem('vortex.inspectAutoCopy')||'none';
+$('#inspectAutoCopy').onchange=()=>localStorage.setItem('vortex.inspectAutoCopy',$('#inspectAutoCopy').value);
 async function recordCoordinate(point) {
   if (!S || busy || screenStale) return;
   const target = {kind:'coordinate', expr:null, quality:10, warnings:['Explicit screen coordinate; layout changes can move the target.']};
@@ -538,8 +586,7 @@ $('#inspectDetail').addEventListener('click', async (event) => {
   if (INSPECT.screenId !== S?.screenId || screenStale) return toast('Refresh and select the target again.',true);
   const n=selectedNode(), choice=INSPECT.choices[INSPECT.choice];
   if (b.dataset.insCopy) {
-    const value={point:pointText(INSPECT.point),percent:percentText(INSPECT.point),text:n?.text,locator:choice?.expr}[b.dataset.insCopy];
-    if (value) {try {await navigator.clipboard.writeText(value); toast('Copied');} catch {toast('Clipboard unavailable. Select the displayed value to copy.',true);}} return;
+    return copyInspection(b.dataset.insCopy);
   }
   const action=b.dataset.insAction;
   if (action==='test') {
@@ -558,7 +605,11 @@ $('#inspectDetail').addEventListener('click', async (event) => {
     const p=INSPECT.point;
     return perform({kind:'tap',x:p.x,y:p.y}, {type:'tap',title:titleOf(n),target:n.target,x:p.x,y:p.y,pre:true,mode:'name'});
   }
-  if (action==='type' && n) {setMode('type'); return onClick(center(findInput(n)),event);}
+  if (action==='type' && n) {
+    const input=findInput(n);
+    if(!input)return toast('Select an editable field before choosing Type.',true);
+    setMode('type'); return onClick(center(input),event);
+  }
   if (action==='assert' && n) {setMode('assert'); return showMenu(n,event);}
 });
 $('#btnInspector').onclick = () => {setMode('inspect'); $('#inspectPanel').open=true; $('#inspectPanel').scrollIntoView({block:'nearest'}); $('#inspectSearch').focus();};
@@ -608,11 +659,13 @@ async function cropAsset(p) {
 }
 
 function center(n) { return { x: Math.round(n.rect.x + n.rect.w / 2), y: Math.round(n.rect.y + n.rect.h / 2) }; }
-function askInputText(fieldName, sensitive) {
+function askInputText(fieldName, sensitive, focused = false) {
   const dialog = $('#textInputDlg'), input = $('#textInputValue');
   if (dialog.open) return Promise.resolve(null);
   $('#textInputLabel').textContent = `Text to type into "${fieldName}"`;
   $('#textInputHint').textContent = sensitive ? 'Sensitive value: typed on the phone; only an environment-variable reference is saved.' : 'Replaces the current value in the selected editable field.';
+  $('#quickPreviewRow').hidden=!focused;
+  if(focused)$('#textInputHint').textContent='Appends the entire value to the currently focused input. Clear existing digits first. Choose screenshot-only feedback below for speed. For replay, set VORTEX_SECRET_FOCUSED_TEXT to a fresh value; the typed value is not saved in the step.';
   input.type = sensitive ? 'password' : 'text'; input.value = '';
   dialog.returnValue = 'cancel';
   return new Promise(resolve => {
@@ -623,18 +676,28 @@ function askInputText(fieldName, sensitive) {
     dialog.showModal(); input.focus();
   });
 }
+async function quickType(){
+  if(!S||busy||screenStale)return toast('Refresh and focus the intended input first.',true);
+  try{if(!(await api('/api/config')).features?.quickType)return toast('Restart the recorder server to enable Quick type, then refresh this page.',true);}catch(error){return toast(error.message,true);}
+  const screenId=S.screenId;
+  const text=await askInputText('currently focused field',true,true);
+  if(text===null)return;
+  if(S.screenId!==screenId||screenStale)return toast('The screen changed. Refresh and focus the input again.',true);
+  if(!text.length||text.length>4096||/[^\x20-\x7e]/.test(text))return toast('Quick type accepts 1–4096 printable ASCII characters.',true);
+  return perform({kind:'type_focused',text,capturePolicy:'fast',previewAfter:$('#quickPreview').checked}, {type:'type_focused',title:'Focused input',args:{},secretEnv:'VORTEX_SECRET_FOCUSED_TEXT',pre:false});
+}
 function findInput(n) {
-  let cur = n;
-  while (cur) { if (/EditText|TextField/i.test(cur.type)) return cur; cur = cur.parentId === null ? null : S.nodes[cur.parentId]; }
-  return null;
+  return findEditableInput(n, S.nodes);
 }
 
 async function onClick(pt, ev, nativeOnly = false) {
   const n = hit(pt.x, pt.y, nativeOnly);
   if (mode === 'inspect') return selectInspection(n, pt);
+  // Explicit coordinates must bypass app nodes behind keyboards/overlays,
+  // including ambiguous or missing accessibility controls at the chosen point.
+  if (mode === 'tap' && $('#tapStyle').value === 'coord') return recordCoordinate(pt);
   if(ambiguousHit(S.nodes,hitCandidates(S.nodes,pt.x,pt.y))){setMode('inspect');selectInspection(n,pt);return toast('Overlapping controls: choose the intended target in the inspector before recording.',true);}
   if (!n) {
-    if (mode === 'tap' && $('#tapStyle').value === 'coord') return recordCoordinate(pt);
     return toast('No exposed element here. Use Inspect to select this screen point.');
   }
   if (['tap', 'longpress', 'doubletap'].includes(mode)) {
@@ -718,7 +781,12 @@ async function perform(body, step) {
   setBusy(true, 'Running on the phone and waiting for the screen to settle...');
   try {
     step.screen ||= screenOf(S);
-    const res = await api('/api/action', { ...body, screenId: S.screenId, capturePolicy:$('#capturePolicy').value });
+    const res = await api('/api/action', { ...body, screenId: S.screenId, capturePolicy:body.capturePolicy||$('#capturePolicy').value });
+    if(res.preview){
+      step.timings=res.timings;steps.push(step);applyPreview(res.preview);renderSteps();regenerate();
+      $('#captureTiming').textContent=`Action ${res.timings.actionMs} ms · preview ${res.timings.captureMs} ms · refresh controls before the next screen action`;
+      return;
+    }
     if (res.actionCompleted && !res.screen) {
       step.comment = 'Action completed; screen capture failed. Review the next step after refreshing.';
       steps.push(step);
@@ -743,7 +811,7 @@ function stepSummary(st) {
   const a = st.args || {};
   const fixed = { hide_keyboard: 'Hide the keyboard', launch_app: 'Launch the app', close_app: 'Close the app', deep_link: 'Open ' + (a.url || ''), check_activity: 'Check screen is ' + (a.activity || '').split('/').pop(), checkpoint: 'Screenshot checkpoint "' + (a.name || '') + '"' }[st.type];
   if (fixed) return fixed;
-  return ({ tap: 'Tap', longpress: 'Long-press', doubletap: 'Double-tap', scroll_to: 'Scroll to', type: 'Type into', clear: 'Clear', wait_visible: 'Wait for', wait_hidden: 'Wait until gone:', wait_enabled: 'Wait until enabled:', assert: 'Check' }[st.type] || '') + t ||
+  return ({ tap: 'Tap', longpress: 'Long-press', doubletap: 'Double-tap', scroll_to: 'Scroll to', type: 'Type into', type_focused:'Quick type into', clear: 'Clear', wait_visible: 'Wait for', wait_hidden: 'Wait until gone:', wait_enabled: 'Wait until enabled:', assert: 'Check' }[st.type] || '') + t ||
     st.type;
 }
 function renderSteps() {
@@ -753,7 +821,7 @@ function renderSteps() {
     const kind = T ? `<span class="badge ${T.quality >= 85 ? 'good' : T.quality >= 55 ? 'warn' : 'bad'}">${T.kind}</span>` : '';
     let hd = st.type === 'swipe' ? 'Swipe ' + st.args.direction + ' (' + st.args.distance + ' px)' : st.type === 'press' ? 'Press ' + st.args.key : st.type === 'sleep' ? 'Wait ' + st.args.ms + ' ms' : stepSummary(st);
     if (st.type === 'assert') hd = 'Check "' + (st.title || '') + '": ' + st.args.assertion + (st.args.expected !== undefined ? ' ' + st.args.expected : '');
-    if (st.type === 'type') hd += st.secretEnv ? ': \u2022\u2022\u2022\u2022' : ': "' + (st.args.text ?? '') + '"';
+    if (['type','type_focused'].includes(st.type)) hd += st.secretEnv ? ': \u2022\u2022\u2022\u2022' : ': "' + (st.args.text ?? '') + '"';
     const isWeb = st.context === 'WEBVIEW';
     const isTap = st.type === 'tap' && T && T.kind !== 'coordinate' && !isWeb;
     const pre = (['tap', 'longpress', 'doubletap', 'type'].includes(st.type) && T && T.kind !== 'coordinate' && (!isTap || (st.mode || 'both') === 'name'))
@@ -772,7 +840,7 @@ function renderSteps() {
       ? `<div class="pre"><button data-vfind="${i}" title="Look for the recorded picture of this element on the current screen">Find on screen</button>${st.visual ? ` <span class="${st.visual.found ? 'ok' : 'warn'}">${esc(st.visual.text)}</span>${st.visual.found && (st.visual.x !== st.x || st.visual.y !== st.y) ? ` <button data-vuse="${i}">Use (${st.visual.x}, ${st.visual.y})</button>` : ''}` : ''}</div>` : '';
     const scr = st.screen || { name: 'App', activity: null };
     const page = `<div class="pg" title="${esc(scr.activity || 'activity unknown')}">Page <input data-page="${i}" value="${esc(scr.name)}">${st.screenAfter && st.screenAfter.name !== scr.name ? ' &rarr; ' + esc(st.screenAfter.name) : ''}</div>`;
-    const sens = st.type === 'type' && T && T.kind !== 'coordinate'
+    const sens = st.type === 'type_focused' || st.type === 'type' && T && T.kind !== 'coordinate'
       ? `<div class="pre"><label><input type="checkbox" data-sens="${i}" ${st.secretEnv ? 'checked' : ''}> sensitive input (password, token, OTP): never stored</label>` +
         (st.secretEnv ? `<div class="pg">read from <input class="secret-env" data-env="${i}" value="${esc(st.secretEnv)}"></div>` : '') + '</div>' : '';
     return `<div class="step" id="step-${i}"><div class="hd"><span class="badge">${i + 1}</span><b>${esc(hd)}</b>${isWeb ? '<span class="ctx web">web</span>' : ''}${kind}<button class="x" data-del="${i}" title="Delete this step">x</button></div>` +
@@ -789,9 +857,10 @@ function renderReview(){
 let editingStep=null;
 function openStepEditor(index){
   const step=steps[index];editingStep=index;$('#editTitle').value=step.title||'';$('#editComment').value=step.comment||'';
-  $('#editInputRow').hidden=step.type!=='type'||!!step.secretEnv;$('#editText').value=step.secretEnv?'':step.args?.text||'';
+  $('#editInputRow').hidden=!['type','type_focused'].includes(step.type)||!!step.secretEnv;$('#editText').value=step.secretEnv?'':step.args?.text||'';
   $('#editExpectedRow').hidden=step.type!=='assert'||!['text','contains','count'].includes(step.args?.assertion);$('#editExpected').value=step.args?.expected??'';
   $('#editWaitRow').hidden=step.type!=='sleep';$('#editWait').value=step.args?.ms||0;
+  $('#editAdbRow').hidden=step.type!=='adb_command';$('#editAdbArgs').value=step.type==='adb_command'?JSON.stringify(step.args?.commandArgs||[],null,2):'';$('#editAdbTimeout').value=(step.args?.timeoutMs??15000)/1000;
   $('#editLocator').value=step.target?.parts?JSON.stringify(step.target.parts,null,2):'';$('#editError').textContent='';$('#stepEditor').showModal();
 }
 $('#editCancel').onclick=()=>$('#stepEditor').close();
@@ -802,6 +871,7 @@ $('#stepEditForm').onsubmit=e=>{
     if(!$('#editInputRow').hidden)patch.text=$('#editText').value;
     if(!$('#editExpectedRow').hidden)patch.expected=$('#editExpected').value;
     if(!$('#editWaitRow').hidden)patch.ms=Number($('#editWait').value);
+    if(!$('#editAdbRow').hidden){patch.commandArgs=JSON.parse($('#editAdbArgs').value);patch.timeoutMs=Number($('#editAdbTimeout').value)*1000;}
     if($('#editLocator').value.trim())patch.parts=JSON.parse($('#editLocator').value);
     steps=editStep(steps,editingStep,patch);$('#stepEditor').close();$('#editText').value='';renderSteps();regenerate();
   }catch(error){$('#editError').textContent=error.message;}
@@ -926,6 +996,8 @@ function regenerate() {
 
 // ---------- buttons ----------
 $('#btnRefresh').onclick = refresh;
+function applyPreview(preview){S=preview;screenStale=true;render();$('#info').textContent='Screenshot preview: controls are stale. Refresh screen before inspecting or recording screen actions.';}
+$('#btnPreview').onclick=async()=>{if(busy)return;setBusy(true,'Taking screenshot preview...');try{if(!(await api('/api/config')).features?.fastPreview)throw Error('Restart the recorder to enable Quick preview.');applyPreview(await api('/api/preview',{}));$('#captureTiming').textContent=`Preview ${S.captureMs} ms · controls need Refresh`;}catch(error){toast(error.message,true);}finally{setBusy(false);}};
 $('#btnBack').onclick = () => perform({ kind: 'key', key: 'BACK' }, { type: 'press', title: 'Back', args: { key: 'BACK' } });
 $('#btnHome').onclick = () => perform({ kind: 'key', key: 'HOME' }, { type: 'press', title: 'Home', args: { key: 'HOME' } });
 $('#btnEnter').onclick = () => perform({ kind: 'key', key: 'ENTER' }, { type: 'press', title: 'Enter', args: { key: 'ENTER' } });
@@ -950,7 +1022,68 @@ $('#btnDebug').onclick = async () => { try { const r = await api('/api/debug', {
 $('#btnSleep').onclick = () => addStep({ type: 'sleep', title: '', args: { ms: 1500 } });
 $('#btnUndo').onclick = () => { steps.pop(); renderSteps(); regenerate(); };
 $('#btnClear').onclick = () => { if (!steps.length || confirm('Remove all recorded steps?')) { steps = []; assets = []; renderSteps(); regenerate(); clearAutosave(); } };
-$('#btnCopy').onclick = async () => { try { await navigator.clipboard.writeText($('#code').value); toast('Copied.'); } catch { $('#code').select(); toast('Press Ctrl+C to copy.'); } };
+async function currentFiles(){
+  if($('#fw').value==='legacy')return [{path:'legacy.spec.ts',content:(await api('/api/generate',{steps:stepPayload(),name:$('#tname').value,pkg:$('#pkg').value||S?.pkg})).code,role:'entry'}];
+  const result=await api('/api/project/preview',projectBody());
+  if(result.issues?.length)throw Error('Fix the generation issues before copying a script.');
+  return result.files||[];
+}
+$('#btnCopy').onclick=async()=>{try{const files=await currentFiles();const selected=files.find(f=>f.path===PREVIEW.active)||files[0];await copyText(selected?.content,'Copied current file');}catch(error){toast(error.message,true);}};
+$('#btnCopyScript').onclick=async()=>{try{const files=await currentFiles();const selected=files.find(f=>f.path===PREVIEW.active&&f.role==='entry')||files.find(f=>f.role==='entry')||files[0];await copyText(selected?.content,'Copied script');}catch(error){toast(error.message,true);}};
+$('#btnCopyAll').onclick=async()=>{try{const files=await currentFiles();await copyText(files.map(f=>`// FILE: ${f.path}\n${f.content}`).join('\n\n'),'Copied all generated files');}catch(error){toast(error.message,true);}};
+
+// ADB commands can run without the expensive accessibility-tree capture.
+let adbRunning=false;
+$('#adbPreset').innerHTML=ADB_PRESETS.map(([key,label])=>`<option value="${key}">${esc(label)}</option>`).join('');
+function populateAdb(){
+  const preset=ADB_PRESETS.find(([key])=>key===$('#adbPreset').value);
+  const args=preset[2].map(value=>value==='{package}'?($('#pkg').value||S?.pkg||'com.example.app'):value);
+  $('#adbCommand').value=JSON.stringify(args,null,2);
+  $('#adbTextRow').hidden=preset[0]!=='text';$('#adbCommandRow').hidden=preset[0]==='text';
+  $('#adbSensitive').checked=preset[0]==='text';$('#adbText').value='';
+  $('#adbText').type=preset[0]==='text'?'password':'text';
+  $('#adbStatus').textContent='';$('#adbOutput').textContent='';$('#adbBinary').replaceChildren();
+}
+function adbSelection(){
+  const args=$('#adbPreset').value==='text'?['shell','input','text',$('#adbText').value]:parseAdbCommand($('#adbCommand').value,S?.device||'');
+  if(!args.length)throw Error('Enter an ADB command.');
+  if($('#adbPreset').value==='text'&&!args[3])throw Error('Enter the text to send.');
+  const sensitive=$('#adbSensitive').checked, env=$('#adbEnv').value.trim().toUpperCase();
+  if(sensitive&&!/^[A-Z][A-Z0-9_]{0,63}$/.test(env))throw Error('Use an environment variable name starting with A–Z, followed by A–Z, 0–9 or _.');
+  const saved=[...args];if(sensitive)saved[saved.length-1]='<secret>';
+  const preset=ADB_PRESETS.find(([key])=>key===$('#adbPreset').value);
+  const timeoutMs=Number($('#adbTimeout').value)*1000;
+  if(!Number.isInteger(timeoutMs)||timeoutMs<1000||timeoutMs>300000)throw Error('Command timeout must be 1–300 seconds.');
+  const step={type:'adb_command',title:preset?.[1]||'Custom ADB',args:{commandArgs:saved,timeoutMs,...sensitive?{secretIndex:saved.length-1}:{}},pre:false,...sensitive?{secretEnv:env}:{}};
+  return {args,step,sensitive,env};
+}
+$('#btnAdb').onclick=()=>{populateAdb();$('#adbDlg').showModal();};
+$('#adbPreset').onchange=populateAdb;
+$('#adbSensitive').onchange=()=>{$('#adbText').type=$('#adbSensitive').checked?'password':'text';};
+$('#adbAdd').onclick=()=>{try{const {step}=adbSelection();addStep(step);$('#adbStatus').textContent='Added to script. No command was executed.';$('#adbText').value='';}catch(error){$('#adbStatus').textContent=error.message;}};
+$('#adbCopy').onclick=()=>{try{copyText(formatAdbCommand(adbSelection().args,S?.device),'Copied ADB command');}catch(error){$('#adbStatus').textContent=error.message;}};
+$('#adbCopyStep').onclick=()=>{try{const {step}=adbSelection();const a=step.args;const secret=step.secretEnv?`, ${a.secretIndex}, process.env[${JSON.stringify(step.secretEnv)}]`:a.timeoutMs!==15000?', undefined, undefined':'';copyText(`// adbCommand helper is included in Vortex Plain/POM exports.\nawait adbCommand(${JSON.stringify(a.commandArgs)}${secret}${a.timeoutMs!==15000?`, ${a.timeoutMs}`:''});`,'Copied script step');}catch(error){$('#adbStatus').textContent=error.message;}};
+async function runAdb(record){
+  if(adbRunning||busy)return;
+  adbRunning=true;
+  try{
+    const selected=adbSelection();
+    setBusy(true,'Running ADB command...');
+    for(const button of $('#adbDlg').querySelectorAll('button'))button.disabled=true;
+    if(!(await api('/api/config')).features?.adbShortcuts)throw Error('Restart the recorder to enable ADB shortcuts, then refresh this page.');
+    const result=await api('/api/action',{kind:'adb_command',commandArgs:selected.args,timeoutMs:selected.step.args.timeoutMs,captureAfter:$('#adbCapture').value==='full',previewAfter:$('#adbCapture').value==='preview',capturePolicy:'fast'});
+    if(record){selected.step.screen=screenOf(S);selected.step.timings=result.timings;addStep(selected.step);}
+    $('#adbText').value='';
+    $('#adbOutput').textContent=result.output?.binary?`Binary output: ${result.output.bytes} bytes`:(result.output?.text||'Command completed with no output.');
+    $('#adbBinary').replaceChildren();
+    if(result.output?.base64){const link=document.createElement('a');link.href='data:application/octet-stream;base64,'+result.output.base64;link.download=$('#adbPreset').value==='screenshot'?'screenshot.png':'adb-output.bin';link.textContent='Download output';$('#adbBinary').append(link);}
+    if(result.preview)applyPreview(result.preview);else if(result.screen){S=result.screen;screenStale=false;render();}else{screenStale=true;resetInspection();}
+    $('#adbStatus').textContent=`${record?'Run and recorded':'Run only'} · ${result.timings?.actionMs??0} ms · ${result.preview?'screenshot preview; refresh controls':result.captureSkipped?'capture skipped; refresh before screen actions':result.warning||'screen captured'}`;
+    $('#captureTiming').textContent=`ADB ${result.timings?.actionMs??0} ms · capture ${result.timings?.captureMs??0} ms`;
+  }catch(error){$('#adbStatus').textContent=error.message;}
+  finally{adbRunning=false;setBusy(false);for(const button of $('#adbDlg').querySelectorAll('button'))button.disabled=false;}
+}
+$('#adbRun').onclick=()=>runAdb(false);$('#adbRunRecord').onclick=()=>runAdb(true);
 $('#btnSave').onclick = async () => {
   if ($('#fw').value !== 'legacy') return saveProject([]);
   try {
@@ -1004,7 +1137,7 @@ try {
 for (const [id, key] of [['fw', 'vortex.framework'], ['mode', 'vortex.mode'], ['target', 'vortex.target'], ['tmodule', 'vortex.module']]) {
   $('#' + id).addEventListener('change', () => { try { localStorage.setItem(key, $('#' + id).value); } catch {} regenerate(); });
 }
-$('#tapStyle').addEventListener('change', () => toast('New tap steps will use this style. Change an existing step in its card.'));
+$('#tapStyle').addEventListener('change', () => {buildToolbar();toast('New tap steps will use this style. Change an existing step in its card.');});
 $('#pkg').addEventListener('change', async () => {try{await api('/api/config', { pkg: $('#pkg').value });refresh();}catch(error){toast(error.message,true);$('#pkg').value=(await api('/api/config')).pkg;}});
 window.addEventListener('resize', () => { if (S) render(); });
 

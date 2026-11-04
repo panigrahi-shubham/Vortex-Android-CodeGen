@@ -7,6 +7,8 @@
 param(
   [string]$Out = "",
   [string]$Pkg = "",
+  [string]$Device = "",
+  [string]$MobilecliDevice = "",
   [int]$Port = 0,
   [switch]$Mock,
   [switch]$Doctor
@@ -29,6 +31,8 @@ if ($Doctor) { exit 0 }
 $serverArgs = @("src/server.js")
 if ($Out) { $serverArgs += @("--out", $Out) }
 if ($Pkg) { $serverArgs += @("--pkg", $Pkg) }
+if ($Device) { $serverArgs += @("--device", $Device) }
+if ($MobilecliDevice) { $serverArgs += @("--mobilecli-device", $MobilecliDevice) }
 if ($Port -gt 0) { $serverArgs += @("--port", "$Port") }
 if ($Mock) { $serverArgs += "--mock" }
 Write-Host ""

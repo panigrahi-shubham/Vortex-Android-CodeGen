@@ -43,6 +43,8 @@ export function describeEvent(e: RecordedEvent): string {
     case 'swipe': return `Swipe ${a.direction ?? ''}`.trim();
     case 'scroll_to': return `Scroll to${t}`;
     case 'type': return `Type into${t}${e.input?.secretEnv ? ' (sensitive)' : ''}`;
+    case 'type_focused': return `Type into the focused field${e.input?.secretEnv ? ' (sensitive)' : ''}`;
+    case 'adb_command': return `ADB command${t}`;
     case 'press': return `Press ${a.key ?? ''}`.trim();
     case 'wait_visible': return `Wait for${t} to appear`;
     case 'wait_hidden': return `Wait for${t} to disappear`;

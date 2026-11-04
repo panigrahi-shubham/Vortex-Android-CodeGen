@@ -314,6 +314,8 @@ export class MobilewrightRunner {
     const args = [env.cli, 'test', '-c', configFile];
     const childEnv: NodeJS.ProcessEnv = {
       ...process.env,
+      VORTEX_ADB_SERIAL: o.serial,
+      VORTEX_SIMULATED_ADB: simulated ? '1' : '0',
       MOBILEWRIGHT_DISABLE_TELEMETRY: '1',
       DO_NOT_TRACK: '1',
       FORCE_COLOR: '0',
