@@ -1,106 +1,250 @@
 # Vortex Android Recorder
 
-**v5.0.0-beta.1 — Live WebView recording.** Inspect WebView DOM elements, then explicitly choose **Run & record** to tap, type or clear on the app and append the executed step. Persistent action receipts support recovery without repeating a request. Uses MobileWright 0.0.69 and retains V4 inspection and device recovery. See [V5 notes](docs/V5_RELEASE.md). This is a local beta build; physical-device acceptance remains pending.
+**V5.0.0-beta.1 · MobileWright 0.0.69**
 
-Local Android inspector, recorder and code generator for MobileWright. Requires Node.js 22.18 or newer, Android platform-tools on PATH, and a USB/Wi-Fi debugging connection. Replay uses the installed MobileWright project; Vortex does not download a runner on demand.
+Inspect Android screens, record actions, and generate TypeScript tests in Plain or Page Object Model (POM) format. V5 adds **live WebView recording**: select a DOM element, choose **Run & record**, and execute a tap, input replacement, or clear while adding the completed step to your recording.
 
-Build the V5 Windows ZIP and checksum with `npm run package:windows`; output is under `dist/`. Node.js, ADB and the replay runner are installed separately. The [published V2 archive](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/releases/tag/v2.0.0-beta.1) is an older release and does not contain V4/V5 features.
+V5 source is available on [`v5-live-webview-recording`](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/tree/v5-live-webview-recording). This beta has been validated with simulated devices on Linux; physical-device and native Windows acceptance remain pending. See the [V5 release notes](docs/V5_RELEASE.md) and [changelog](CHANGELOG.md).
 
-## Start
+## What you can do
 
-Install this project's development dependencies with npm install. In the output project, install the supported runner if it is missing:
+- **Inspect native controls:** search text, accessibility labels, IDs and classes; review locator matches, bounds, and screen coordinates without tapping the phone.
+- **Inspect WebView DOM:** discover and explicitly select an inspectable page, search its visible elements, and copy CSS selectors with actual match counts.
+- **Record live WebView actions:** tap, replace input, or clear a field with **Run & record**. Keep **Add step only** for planning a flow without executing it.
+- **Edit recordings:** reorder, duplicate and edit steps; insert before/after checks; recover browser and server drafts.
+- **Generate and replay tests:** export Plain, POM or Both; reopen cases, run them, inspect reports and compare benchmark timings.
+- **Manage device connections:** select a ready device, recover after reconnecting, or connect an already-paired, reachable Wi-Fi ADB endpoint.
+- **Use ADB shortcuts:** run or record explicit argument arrays for navigation, screenshots, text, diagnostics and other device commands.
 
-    mkdir generated
-    cd generated
-    npm init -y
-    npm install -D @mobilewright/test@0.0.69
-    cd ..
-    npm start -- --out generated --pkg com.example.yourapp --device YOUR_ADB_SERIAL
+## Requirements
 
-Use your own package and adb serial (from adb devices). Open http://localhost:4700. To inspect sample screens without a phone, use npm run mock. Node.js and ADB must be installed separately, including when using the Windows ZIP.
+| Component | Requirement |
+| --- | --- |
+| Node.js | **22.18 or newer**; Node.js 24 recommended |
+| Android platform-tools | `adb` available on `PATH` for physical-device work |
+| Android device | USB debugging or an already-paired, reachable Wi-Fi debugging connection |
+| Replay runner | **`@mobilewright/test@0.0.69`** installed in the output project |
+| Mock WebView / integration tests | Playwright and Chromium; see [Verification](#verification) |
 
-If Mobilecli names your emulator differently from ADB, supply its ID separately. For the development emulator used here:
+Replay uses the installed runner; Vortex does not download one on demand. Real WebView inspection and live recording require an app that exposes an inspectable page and the default Mobilecli hierarchy owner. A debuggable APK label alone does not establish DOM access.
 
-    npm start -- --out generated --pkg com.indiamart.m --device emulator-5554 --mobilecli-device Pixel_10_Pro_XL_2
+## Get the V5 source
 
-This avoids a custom shell tree command. Get Mobilecli IDs with `node generated/node_modules/mobilecli/index.js devices --platform android`. ADB commands continue to use the transport serial. The PowerShell launcher accepts `-Device` and `-MobilecliDevice` too.
+```bash
+git clone --branch v5-live-webview-recording --single-branch https://github.com/panigrahi-shubham/Vortex-Android-CodeGen.git
+cd Vortex-Android-CodeGen
+npm ci
+```
 
-If the recorder is already running, open its existing window. A duplicate start reports the occupied port without recovering or stopping the existing recorder's work.
+If you already have this branch checked out, run `npm ci` from the repository root.
 
-## Device connection and recovery
+## Start with an Android device
 
-The development runner targets MobileWright **0.0.69**. Open **Tools → Devices** to refresh the device list, select a ready device without restarting Vortex, or recover the selected device after reconnecting it. Missing, offline and unauthorized devices show specific guidance. Recovery discards old screen targets and requires **Refresh screen** before recording more actions; it keeps existing recorded steps and never silently chooses another phone. An optional Mobilecli alias can be supplied for a new selection; otherwise it uses the ADB serial.
+Create a separate output project and install the pinned runner. These commands work in PowerShell and Bash:
 
-For an already-paired Wi-Fi debugging device, enter its **connection address** (for example `192.168.1.40:5555`) and choose **Connect**, then explicitly **Select** it. Pair the device on the Vortex host separately; the panel does not collect pairing credentials or enable debugging. The connection must be reachable from the machine running Vortex. A USB phone attached to your own computer is not automatically available inside a cloud environment. Selection and aliases apply to the current server session; use `--device` and `--mobilecli-device` to set startup defaults.
+```bash
+mkdir generated
+cd generated
+npm init -y
+npm install --save-dev @mobilewright/test@0.0.69
+cd ..
+adb devices -l
+```
 
-Mock mode displays simulated devices and refuses physical connection commands. These features are included in V5. Physical-device acceptance remains pending; the [historical V3 roadmap](docs/V3_ROADMAP.md) records the earlier proposals.
+Use the actual app package and a serial reported as `device` by ADB:
 
-## Inspect and record
+```bash
+npm start -- --out generated --pkg com.example.yourapp --device YOUR_ADB_SERIAL --tree-source mobilecli
+```
 
-The default Inspect mode selects a control without tapping the phone. Search the captured hierarchy by text, accessibility label, identifier or class. Selection shows available locators, match highlights, state, bounds, pixel center and percentage coordinates. Copy a locator or point, then explicitly choose Record tap, Record type, Add assertion or Record coordinate tap.
+Open **http://localhost:4700**. On the phone, accept the debugging authorization prompt if it appears. If Vortex is already running, reuse its window; a duplicate start reports the occupied port without stopping the existing recorder.
 
-Refresh after navigating on the phone. Match counts refer to the captured hierarchy; they do not certify future replay. Prefer stable IDs or labels; duplicate text and position locators need review. Coordinates depend on screen size and layout.
+If Mobilecli reports a different device ID, find it and supply it separately:
 
-When multiple unrelated controls overlap, direct recording switches to inspection without acting. Use **Controls at this point** to choose the intended control and review its highlight. Controls explicitly marked invisible are excluded from pointer selection; missing visibility data is not treated as proof of foreground ownership.
+```bash
+node generated/node_modules/mobilecli/index.js devices --platform android
+npm start -- --out generated --pkg com.example.yourapp --device YOUR_ADB_SERIAL --mobilecli-device YOUR_MOBILECLI_ID --tree-source mobilecli
+```
 
-Every recorded step has **Edit**, **Move up/down**, **Duplicate**, **Check before** and **Check after** controls. Edit input text, expected values, wait duration, comments or advanced locator parts. Select a control from the current screenshot before inserting a check around an existing step. Those checks are added to the replay script; they do not execute immediately on the phone. Suggested checks start unchecked. **Recording review** flags positional targeting and coordinate actions without neighboring result checks.
+ADB commands continue to target the transport serial. The PowerShell launcher also supports `-Device` and `-MobilecliDevice`.
 
-**Fast capture** takes one fresh tree/screenshot after each action. **Stable capture** compares consecutive trees. Full captures take their screenshot after the tree lookup finishes. **Quick preview** takes only a screenshot and invalidates old hit targets until Refresh; it does not claim synchronized controls or completed network activity. The timing readout separates action, capture and total elapsed time. Record a destination or persisted-result assertion.
+## Try the sample screens without a phone
 
-Drafts preserve the package, device identity and capture policy, and are stored in the browser and `.vortex/recording-draft.json`. A server copy can restore a recording even after browser storage is cleared. Revision conflicts prevent one tab from silently replacing another tab's draft. Sensitive input values are removed; only environment-variable references are kept. Save to the project for a durable, versioned test.
+```bash
+npm run mock -- --out generated --no-open
+```
 
-Tap, long press, double tap, swipe, typing, clear, scroll-to, waits, assertions and app/navigation actions feed the recording. Unsupported generation is reported before saving. For Type, choose an exposed editable field with a replayable locator.
+Open **http://localhost:4700**. Native sample inspection works without a connected phone. To inspect the sample WebView or replay generated flows, prepare the runner and Chromium as described in [Verification](#verification), and start mock mode with those environment variables set.
 
-**Quick type** sends the entire value with ADB to the already focused field. Screenshot-only feedback is the default; uncheck it in the input dialog for a full capture. It appends without selecting or clearing text, so focus the intended input and clear existing digits first. Quick type accepts printable ASCII (including OTP digits). Its recorded value defaults to `VORTEX_SECRET_FOCUSED_TEXT`; set that environment variable to a fresh value before replay. Plain/POM replay calls the supported `device.driver.typeText()` API. For keyboards whose keys are absent from the hierarchy, **Keypad taps** records explicit screen coordinates instead; each individual tap still captures the screen.
+In the sample app, inspect the **Market Insights** card and choose **Record tap** to open it. Then open **WebView DOM** to inspect its email field, Subscribe button and status text. Its Chromium DOM changes during live actions; the native sample screenshot remains a static image.
 
-**ADB shortcuts** provides text, key events, clear, tap, swipe, long press, app launch/close, URLs, screenshots and diagnostic presets. Paste a custom ADB command or a JSON argument array for other commands. Use **Run only**, **Add to script**, **Run & record**, **Copy ADB command** or **Copy script step**. Choose no capture (default), screenshot-only preview, or a full capture. Skipped captures and previews invalidate old controls, so refresh before acting on screen controls. Set the command timeout from 1 to 300 seconds; it is retained in the script. Step **Edit** can change its argument array and timeout while retaining a `<secret>` placeholder. Output is shown in the panel, with a download for binary output. Host shell syntax is not executed; Android pipelines can explicitly use `shell sh -c "..."`. Commands always target the selected transport serial. Mark a sensitive last argument to save its environment-variable reference instead of its value.
+## Record a native flow
 
-Plain/POM exports include an `adbCommand` helper. Vortex supplies `VORTEX_ADB_SERIAL` from the selected device at replay time, independently of MobileWright's device alias. Set that variable yourself when running an exported test outside Vortex. Raw ADB steps refuse simulated replay so a mock run cannot contact connected hardware. Legacy exports reject ADB steps instead of omitting them.
+1. Start in **Inspect** mode. Search the captured controls or select a screen point; inspection alone sends no tap.
+2. Review the locator and match count. Choose **Record tap**, **Record type**, **Add assertion**, or an explicit coordinate action.
+3. Refresh after navigating outside Vortex. Prefer stable IDs and labels; positional and coordinate targets depend on layout.
+4. Edit or reorder steps, add meaningful result checks, name the test and module, then save to the project.
+5. Use **Project & runs** to reopen or replay the saved case and review its report.
 
-For a read-only StockPilot home smoke test on a connected emulator, install the supported runner in `generated` as above, then run `npm run smoke:stockpilot -- --device emulator-5554`. The test launches StockPilot, optionally dismisses its offer dialog, checks the home/search/cart controls, attaches a screenshot and closes the app. It does not create or edit business data.
+**Fast capture** reads one fresh hierarchy and screenshot after an action. **Stable capture** compares consecutive hierarchies. **Quick preview** reads only a screenshot and invalidates old hit targets until a full refresh.
 
-Inspect offers copies of the locator, ID, text, class, bounds/details, pixels, percentages, ADB tap command and MobileWright tap statement. **Copy when selected** optionally copies a locator/ID/text/ADB tap as you inspect. **Copy current file**, **Copy script** and **Copy all files** regenerate current steps before copying; all-files output includes file-name headers for multi-file POM exports. A selection dialog is available when clipboard permission is unavailable.
+Drafts preserve recording steps, package, device identity and capture policy in browser storage and `.vortex/recording-draft.json`. Revision checks prevent conflicting tabs from silently overwriting each other. Save to the project for a durable recording history.
 
-## Web content
+## Record a live WebView flow
 
-Open **WebView DOM → Find pages / refresh**, explicitly choose a page, and select **Inspect page**. Search visible top-level DOM elements by text, label, DOM id or CSS. Select an element to inspect its selector, actual match count, state and CSS bounds.
+1. Navigate to the intended WebView on the phone.
+2. Open **WebView DOM → Find pages / refresh**, explicitly select a page, and choose **Inspect page**.
+3. Search by text, label, DOM ID or CSS. Select an element and review its selector, match count, state and bounds.
+4. Choose the action mode below, then add or execute the required step.
+5. Save and replay using Plain, POM or Both. Review a destination or persisted-result assertion for each important action.
 
-**Add step only** preserves V4's recording-only workflow. Choose **Run & record** to execute tap, type or clear immediately and append one completed step. Input replacement uses the native DOM value setter plus input/change events, matching the supported MobileWright WebView primitives. Assertions are still added for replay. Every mutation rechecks the page and target, uses the recorder's device lease, and invalidates the preceding snapshot. The panel refreshes after completion; a refresh failure keeps the completed step and asks you to inspect again.
+| Control | Acts on the app now? | Recording behavior |
+| --- | --- | --- |
+| Inspect / select / copy CSS | No | Reads the current DOM |
+| Add step only | No | Appends a replay step |
+| Run & record: tap, type, clear | Yes | Appends a confirmed completed step |
+| Add assertion | No | Appends a check for replay |
 
-Sensitive input uses two separate fields: an environment variable name for replay, and a **Value for this live action** used only for execution. The latter is not put in command arguments, receipt files or recorded steps. Password fields require an environment reference. Screenshots and page text can still show whatever the app itself displays or echoes; review them before sharing.
+Type replaces the field's value; clear empties it. Live actions use the supported MobileWright DOM primitives: `click()`, the native value setter, and input/change events. They do not provide trusted OS touch or keyboard events.
 
-If a response is lost, use **Recover last action result**. Receipts under the recorder's state folder prevent the same request ID from dispatching twice, including after restart. An unknown outcome requires checking the app and explicitly acknowledging review before a new live action. Recovery never automatically repeats the action. A completed step is added only once, and recovery checks the matching app/device.
+![V5 WebView DOM inspector with Run and record controls](docs/images/v5-live-webview.png)
 
-No exposed page means DOM inspection is unavailable, not that the app has no WebView. Native accessibility inspection and explicit coordinates remain available. Several pages require reliable native-to-page mapping before replay steps can be added. Frames and shadow DOM are not traversed. DOM bounds remain CSS pixels, independently of Android screenshot coordinates. See [WebView details](docs/WEBVIEW_AND_VISUAL.md).
+*The screenshot shows the synthetic sample. Its DOM state is live; its native image is static.*
 
-## Save and replay
+### Sensitive input
 
-MobileWright is the only active engine. Plain generates a standalone TypeScript test; POM generates pages, fixtures, test data and tests. Both writes both variants with one discoverable run target. The legacy single .spec.ts export is also retained.
+Sensitive typing uses two separate values:
 
-Project & runs opens saved cases, starts a case/module/all tests, streams output, cancels a run and shows history/reports. Retries require an explicit repeat-safe confirmation because tests may change app data. Saving protects hand edits with a .vortex-new file. Old exporter files already in generated are preserved as user data and are not offered as MobileWright run targets.
+- **Environment variable:** the reference saved for future replay, such as `VORTEX_SECRET_WEB_INPUT`. Set that variable on the host before replay.
+- **Value for this live action:** the one-time input sent during execution. Vortex excludes it from recorded input, action receipts and command-line arguments.
 
-Plain/POM replay uses a case's saved app package. Mixed-app module/all batches and cases with pending `.vortex-new` review are rejected. An explicit first Launch step avoids a duplicate startup launch, and normal cleanup avoids repeating an explicit successful final Close. Failed tests still attempt app cleanup. Name-with-coordinate fallback now uses coordinates only when the locator is absent; a failed delivered locator tap propagates without a second tap. Plain/POM coordinate actions verify recorded screen dimensions against a fresh PNG before sending a tap; this checks dimensions, not page identity or element position.
+Password fields require an environment reference. DOM collection excludes field values, but an app can still echo input into visible text, URLs or screenshots. Review artifacts before sharing them.
 
-Tools contains device details, setup checks and benchmarks. Benchmarks repeat a saved MobileWright flow, report timings and variation, and label simulated devices. Resetting or replaying a flow can repeat its changes.
+### Recover an interrupted action
+
+Use **Recover last action result** after losing a browser response. Vortex stores sanitized receipts in `<state-dir>/webview-actions/`; repeating the same request ID returns its result without dispatching the action again. Recovery inserts a completed step once and checks the matching app/device.
+
+If the action completed but screen capture failed, keep the recorded step and inspect again. If its outcome is unknown, check the app and explicitly choose **I reviewed the outcome** before starting a new live request. Keep the state folder and pending browser receipt ID for recovery. This protection does not guarantee exactly-once business effects across different request IDs or retries inside the app.
+
+### WebView limits
+
+- Inspectable, visible **top-level light DOM** only. Frames and shadow DOM are not traversed.
+- Up to **400 elements**, scanning at most **3000 candidates** per snapshot. Truncation is reported.
+- Bounds are **CSS pixels**, independently of Android screenshot coordinates; there is no synchronized DOM overlay.
+- Several pages require reliable native-to-page mapping before replay steps can be added. Ambiguous mappings remain inspection/copy-only.
+- Native capture changes invalidate DOM targets. Live dispatch also rechecks page identity, unique matching, visibility, enabled/editable state and covering controls.
+- Plain/POM exports guard the recorded page protocol, origin and path. Legacy export refuses DOM steps.
+- No remote phone tunnel is created. A USB phone attached to another computer is not automatically visible to this host.
+
+When no inspectable page is exposed, use the native controls actually available or an explicit coordinate action. See [WebView details](docs/WEBVIEW_AND_VISUAL.md).
+
+## Devices, typing and ADB shortcuts
+
+Open **Tools → Devices** to refresh the list, select a ready device, or recover the selected device after reconnecting it. Recovery keeps recorded steps, invalidates old targets and requires a fresh screen. It never silently selects another phone. Selection applies to the current session; startup defaults use `--device` and `--mobilecli-device`.
+
+For an already-paired Wi-Fi device, enter its connection address, such as `192.168.1.40:5555`, choose **Connect**, then explicitly **Select** it. Pair on the Vortex host separately. Mock mode refuses physical connection commands.
+
+**Quick type** appends printable ASCII to the already-focused field using ADB. It does not select or clear existing text. Its recorded value defaults to `VORTEX_SECRET_FOCUSED_TEXT`; screenshot-only feedback is the default. **Keypad taps** records explicit coordinates for keys absent from the hierarchy.
+
+**ADB shortcuts** supports presets and explicit argument arrays, separate run/record modes, configurable timeouts, capture choices, command copying and binary downloads. Commands target the selected serial. Host shell syntax is not executed; Android pipelines require an explicit `shell sh -c` command. Raw ADB steps refuse simulated replay. Exported tests run outside Vortex must set `VORTEX_ADB_SERIAL` themselves.
+
+For the existing StockPilot read-only home smoke example:
+
+```bash
+npm run smoke:stockpilot -- --device YOUR_ADB_SERIAL
+```
+
+See [recording details](docs/AUTOMATIC_RECORDING.md) and the [real-app acceptance checklist](docs/ACCEPTANCE_20.md).
+
+## Save, export and replay
+
+- **Plain:** one standalone TypeScript test.
+- **POM:** page objects, fixtures, test data and tests.
+- **Both:** both variants, with one discoverable default target to avoid running the flow twice.
+
+Saving preserves hand-edited output and writes proposed replacements beside it as `.vortex-new`. Resolve pending file review before replay. Module/all runs reject mixed-app batches. Retries require an explicit repeat-safe confirmation because earlier successful actions can change app data again.
+
+**Copy current file**, **Copy script** and **Copy all files** regenerate the current recording before copying. Reports distinguish passed, failed, empty, skipped, cancelled and load-error results. Benchmarks label simulated results and can repeat the selected flow's app changes.
+
+The legacy single `.spec.ts` format remains available for supported older actions. Appium/Python execution is retired; old generated files remain user data. Earlier recordings still use schema version 1.
 
 ## Configuration
 
-Command-line options: --out, --pkg, --device, --mobilecli-device, --port, --state-dir, --no-open, --mock, --tree-source and --tree-cmd. Their environment counterparts are OUT_DIR, PKG, DEVICE, MOBILECLI_DEVICE, PORT, VORTEX_STATE_DIR, TREE_SOURCE and TREE_CMD. Default port is 4700; output and state folders default to generated and .vortex.
+| Option | Environment variable | Default / purpose |
+| --- | --- | --- |
+| `--out` | `OUT_DIR` | `generated`; output/replay project |
+| `--pkg` | `PKG` | `com.yourname.tradehub`; app package |
+| `--device` | `DEVICE` | ADB serial; otherwise discover a single ready device |
+| `--mobilecli-device` | `MOBILECLI_DEVICE` | Mobilecli ID when it differs from the serial |
+| `--port` | `PORT` | `4700` |
+| `--state-dir` | `VORTEX_STATE_DIR` | `.vortex`; drafts, receipts and run state |
+| `--tree-source` | `TREE_SOURCE` | `auto`; use `mobilecli` for WebView workflows |
+| `--tree-cmd` | `TREE_CMD` | `mobilecli dump ui`; custom commands disable DOM inspection/live actions |
+| `--no-open` | — | Do not open the browser automatically |
+| `--mock` | — | Use simulated devices and sample screens |
 
-The default tree source uses local node_modules/mobilecli when available. It passes the selected serial. A failed installed Mobilecli request does not start competing uiautomator instrumentation. Explicit --tree-source uiautomator remains available for environments without a running Mobilecli automation owner.
+A failed installed Mobilecli request does not start competing uiautomator instrumentation. Explicit `--tree-source uiautomator` remains a native-only option when no other automation owner is active.
 
 ## Verification
 
-    npm test
-    npm run typecheck
-    npm run doctor -- --out generated
+From the repository root:
 
-Integration tests require an installed MobileWright project and Playwright/Chromium for the simulated WebView fixture. In PowerShell set VORTEX_MOBILEWRIGHT_DIR and VORTEX_PLAYWRIGHT to the absolute generated project path, then run npm run test:integration. Simulated tests are reported as simulated and do not establish phone performance.
+```bash
+npm test
+npm run typecheck
+npm run doctor -- --out generated
+```
 
-Historical beta checks and live-device evidence are documented in docs/BETA_RELEASE.md. Current release-candidate checks are documented in docs/V1_RELEASE.md. Integration tests use simulated devices with the real installed MobileWright runner; passing them does not establish physical-phone reliability. The configured GitHub CI also targets Linux; local Windows results do not establish a Linux CI pass.
+For mock WebView inspection and the full integration suite, first install the runner in `generated` as above, then install Chromium:
 
-## Migration
+```bash
+node generated/node_modules/playwright/cli.js install chromium
+```
 
-The active Appium server manager, sessions, inspector, Python generation/runs, routes and setup checks have been removed. Existing generated tests are retained as user data. The separate future rebuild prompt remains in docs/VORTEX_INSPECTOR_REBUILD_PROMPT.md; it is a design reference, not an implemented feature list.
+Linux may also need browser system dependencies; CI uses `install --with-deps chromium`.
 
-See docs/ARCHITECTURE.md, docs/PROJECTS_AND_MODES.md, docs/AUTOMATIC_RECORDING.md, docs/WEBVIEW_AND_VISUAL.md, docs/REPORTS_AND_DIAGNOSTICS.md and docs/BENCHMARKS.md for details.
+**PowerShell:**
+
+```powershell
+$runnerProject = (Resolve-Path .\generated).Path
+$env:VORTEX_MOBILEWRIGHT_DIR = $runnerProject
+$env:VORTEX_PLAYWRIGHT = $runnerProject
+npm run test:integration
+```
+
+**Bash:**
+
+```bash
+export VORTEX_MOBILEWRIGHT_DIR="$PWD/generated"
+export VORTEX_PLAYWRIGHT="$PWD/generated"
+npm run test:integration
+```
+
+Keep these variables set when starting mock mode to use the WebView sample.
+
+| V5 check | Observed result |
+| --- | --- |
+| `npm test` | 28 legacy checks and 81 Node tests passed |
+| `npm run typecheck` | Passed |
+| `npm run test:integration` | 29 tests passed, zero skips |
+| Windows packaging / extracted startup | Passed on Linux |
+| Physical-device and native Windows acceptance | Pending |
+
+These results cover Linux simulation with the installed MobileWright runner and Chromium. CI is configured for Linux and Windows; hosted CI outcomes are separate from these local results. Historical evidence remains in [V2 notes](docs/V2_RELEASE.md), [V1 notes](docs/V1_RELEASE.md) and [earlier beta notes](docs/BETA_RELEASE.md).
+
+## Build the Windows ZIP
+
+```bash
+npm run package:windows
+```
+
+Output:
+
+```text
+dist/vortex-android-recorder-5.0.0-beta.1-windows.zip
+dist/vortex-android-recorder-5.0.0-beta.1-windows.zip.sha256
+```
+
+The ZIP includes the recorder, launchers, documentation and synthetic samples. Install Node.js, ADB and the replay runner separately. Building a ZIP or pushing this branch does not publish a GitHub release. The [published V2 archive](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/releases/tag/v2.0.0-beta.1) contains the earlier feature set.
+
+More documentation: [Architecture](docs/ARCHITECTURE.md) · [Projects and modes](docs/PROJECTS_AND_MODES.md) · [Reports](docs/REPORTS_AND_DIAGNOSTICS.md) · [Benchmarks](docs/BENCHMARKS.md).
