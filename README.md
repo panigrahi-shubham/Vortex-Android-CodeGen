@@ -1,10 +1,10 @@
 # Vortex Android Recorder
 
-**v4.0.0-beta.1 — WebView DOM inspection.** Discover inspectable pages, choose a context, search visible DOM elements, copy verified CSS selectors, and add WebView replay steps from a separate inspector. Uses MobileWright 0.0.69 and includes device connection/recovery from the V3 development work. See [V4 notes](docs/V4_RELEASE.md). This is a local beta build; physical-device acceptance remains pending.
+**v5.0.0-beta.1 — Live WebView recording.** Inspect WebView DOM elements, then explicitly choose **Run & record** to tap, type or clear on the app and append the executed step. Persistent action receipts support recovery without repeating a request. Uses MobileWright 0.0.69 and retains V4 inspection and device recovery. See [V5 notes](docs/V5_RELEASE.md). This is a local beta build; physical-device acceptance remains pending.
 
 Local Android inspector, recorder and code generator for MobileWright. Requires Node.js 22.18 or newer, Android platform-tools on PATH, and a USB/Wi-Fi debugging connection. Replay uses the installed MobileWright project; Vortex does not download a runner on demand.
 
-Build the V4 Windows ZIP and checksum with `npm run package:windows`; output is under `dist/`. Node.js, ADB and the replay runner are installed separately. The [published V2 archive](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/releases/tag/v2.0.0-beta.1) is an older release and does not contain V4 features.
+Build the V5 Windows ZIP and checksum with `npm run package:windows`; output is under `dist/`. Node.js, ADB and the replay runner are installed separately. The [published V2 archive](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/releases/tag/v2.0.0-beta.1) is an older release and does not contain V4/V5 features.
 
 ## Start
 
@@ -33,7 +33,7 @@ The development runner targets MobileWright **0.0.69**. Open **Tools → Devices
 
 For an already-paired Wi-Fi debugging device, enter its **connection address** (for example `192.168.1.40:5555`) and choose **Connect**, then explicitly **Select** it. Pair the device on the Vortex host separately; the panel does not collect pairing credentials or enable debugging. The connection must be reachable from the machine running Vortex. A USB phone attached to your own computer is not automatically available inside a cloud environment. Selection and aliases apply to the current server session; use `--device` and `--mobilecli-device` to set startup defaults.
 
-Mock mode displays simulated devices and refuses physical connection commands. These features are included in V4. Physical-device acceptance remains pending; the [historical V3 roadmap](docs/V3_ROADMAP.md) records the earlier proposals.
+Mock mode displays simulated devices and refuses physical connection commands. These features are included in V5. Physical-device acceptance remains pending; the [historical V3 roadmap](docs/V3_ROADMAP.md) records the earlier proposals.
 
 ## Inspect and record
 
@@ -63,11 +63,15 @@ Inspect offers copies of the locator, ID, text, class, bounds/details, pixels, p
 
 ## Web content
 
-Open **WebView DOM → Find pages / refresh**, explicitly choose a page, and select **Inspect page**. The panel reads visible top-level DOM elements using the existing Mobilecli connection. Search by text, label, DOM id or CSS; select an element to see its locator, actual match count, state, CSS bounds and alternative selectors. Copy CSS or explicitly add a tap, type, clear or assertion step. **Adding a step does not execute it on the phone.** Navigate on the phone when needed, then find/inspect again; execute the saved flow through replay.
+Open **WebView DOM → Find pages / refresh**, explicitly choose a page, and select **Inspect page**. Search visible top-level DOM elements by text, label, DOM id or CSS. Select an element to inspect its selector, actual match count, state and CSS bounds.
 
-Typing defaults to an environment-variable reference. Password fields require one, and the inspector does not read field values. New WebView recording metadata omits URL credentials, query strings and fragments. Adding steps revalidates the page and locator; a changed native capture invalidates the DOM snapshot. Plain/POM replay checks the recorded page origin and path before using its DOM locators.
+**Add step only** preserves V4's recording-only workflow. Choose **Run & record** to execute tap, type or clear immediately and append one completed step. Input replacement uses the native DOM value setter plus input/change events, matching the supported MobileWright WebView primitives. Assertions are still added for replay. Every mutation rechecks the page and target, uses the recorder's device lease, and invalidates the preceding snapshot. The panel refreshes after completion; a refresh failure keeps the completed step and asks you to inspect again.
 
-No exposed page means DOM inspection is unavailable, not that the app has no WebView. Native accessibility inspection and explicit coordinates remain available. Several pages require reliable native-to-page mapping before replay steps can be added. Frame and shadow DOM contents are not traversed in this beta; positional CSS carries a warning. DOM bounds are CSS pixels and are not painted over Android screenshot coordinates. See [WebView details](docs/WEBVIEW_AND_VISUAL.md).
+Sensitive input uses two separate fields: an environment variable name for replay, and a **Value for this live action** used only for execution. The latter is not put in command arguments, receipt files or recorded steps. Password fields require an environment reference. Screenshots and page text can still show whatever the app itself displays or echoes; review them before sharing.
+
+If a response is lost, use **Recover last action result**. Receipts under the recorder's state folder prevent the same request ID from dispatching twice, including after restart. An unknown outcome requires checking the app and explicitly acknowledging review before a new live action. Recovery never automatically repeats the action. A completed step is added only once, and recovery checks the matching app/device.
+
+No exposed page means DOM inspection is unavailable, not that the app has no WebView. Native accessibility inspection and explicit coordinates remain available. Several pages require reliable native-to-page mapping before replay steps can be added. Frames and shadow DOM are not traversed. DOM bounds remain CSS pixels, independently of Android screenshot coordinates. See [WebView details](docs/WEBVIEW_AND_VISUAL.md).
 
 ## Save and replay
 

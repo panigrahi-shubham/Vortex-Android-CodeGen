@@ -17,6 +17,7 @@ import { createDraftStore } from './draft-store.js';
 import { isEditableControl } from './input-controls.js';
 import { validateAdbArgs, adbTimeout } from '../public/adb-tools.js';
 import { captureEvidence } from './capture-evidence.js';
+import { performDomAction } from '../public/webview-action.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -56,6 +57,8 @@ let connectionDevices;
 let webviews;
 let webviewRead;
 let mockWebHost;
+let webActionJournal;
+let liveWebviewRpc;
 let connectionHint;
 let assertConnectionSerial;
 let vortexUnavailable = null;
@@ -67,6 +70,10 @@ async function initialize() {
   const { createDeviceManager, connectionHint: hint, assertSerial } = await import('./devices/device-manager.ts');
   connectionDevices = createDeviceManager(); connectionHint = hint; assertConnectionSerial = assertSerial;
   const { createWebviewInspector, runMobilecliRead } = await import('./webview-inspector.ts');
+  const { createWebActionJournal } = await import('./webview-actions.ts');
+  const { createMobilecliRpc, mobilecliBinary } = await import('./mobilecli-rpc.ts');
+  webActionJournal = createWebActionJournal(opts.stateDir);
+  liveWebviewRpc = createMobilecliRpc(() => mobilecliBinary(localMobilecli()));
   webviewRead = runMobilecliRead;
   webviews = createWebviewInspector(readWebview);
   const { createVortex } = await import('./vortex/index.ts');
@@ -375,6 +382,44 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname.startsWith('/api/webviews')) {
       if (!vortex || !webviews) return json(res, 501, { error: vortexUnavailable || 'WebView services unavailable.' });
+      const receiptMatch = /^\/api\/webviews\/actions\/([A-Za-z0-9-]{16,64})$/.exec(url.pathname);
+      if (req.method === 'GET' && receiptMatch) {
+        const receipt = webActionJournal.get(receiptMatch[1]);
+        return json(res, receipt ? 200 : 404, receipt ? { receipt, current: { appPackage: opts.pkg, serial: currentSerial() } } : { error: 'No saved receipt for this action. Inspect the app before deciding whether to perform a new action.' });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/webviews/execute') {
+        const body = await readBody(req);
+        return json(res, 200, await withRecorder(async () => {
+          const result = await webActionJournal.execute({
+            body, appPackage: opts.pkg, serial: currentSerial(),
+            prepare: async () => {
+              const prepared = await webviews.prepare(body, state.invalid ? undefined : state.screenId);
+              prepared.step.screen = { name: 'WebView', activity: state.activity || null };
+              return prepared;
+            },
+            ready: async () => {
+              if (opts.mock) return;
+              const dev = await getDevice();
+              if (dev.source !== 'mobilecli' || opts.treeCmd !== 'mobilecli dump ui') throw Object.assign(new Error('Live DOM actions require the existing default Mobilecli owner.'), { httpStatus: 409 });
+              await liveWebviewRpc.ready();
+            },
+            invalidate: () => { webviews.invalidate(); invalidateConnectionScreen(); },
+            dispatch: async (prepared, value) => {
+              const command = { action: prepared.step.type, selector: prepared.selector, ...prepared.expected, value };
+              const expression = `(${performDomAction.toString()})(${JSON.stringify(command)})`;
+              if (opts.mock) return mockWebHost.page.evaluate(expression);
+              const dev = await getDevice();
+              return liveWebviewRpc.call('device.webview.evaluate', { deviceId: opts.mobilecliDevice || dev.serial, id: prepared.viewId, expression });
+            },
+            observe: async prepared => {
+              const screen = await capture();
+              try { return { screen, inspection: { ...(await webviews.inspect(prepared.viewId, state.screenId, state.raw)), simulated: opts.mock } }; }
+              catch { return { screen, inspection: null, needsRefresh: true, warning: 'Action completed. The page changed or DOM refresh was unavailable; find and inspect the intended page before continuing.' }; }
+            },
+          });
+          return { ...result, current: { appPackage: opts.pkg, serial: currentSerial() } };
+        }));
+      }
       if (req.method === 'GET' && url.pathname === '/api/webviews') return json(res, 200, await withRecorder(async () => {
         webviews.invalidate();
         const screen = await capture();
@@ -473,7 +518,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ...r, mock: opts.mock });
     }
     if (req.method === 'GET' && url.pathname === '/api/config') {
-      return json(res, 200, { version:VERSION, features:{quickType:true,adbShortcuts:true,fastPreview:true,deviceConnection:true,webviewDom:true}, pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
+      return json(res, 200, { version:VERSION, features:{quickType:true,adbShortcuts:true,fastPreview:true,deviceConnection:true,webviewDom:true,webviewLive:true}, pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       const b = await readBody(req);
@@ -569,6 +614,7 @@ async function shutdown(sig) {
   log(`${sig} received, shutting down`);
   try {
     if (mockWebHost) await mockWebHost.close();
+    if (liveWebviewRpc) await liveWebviewRpc.close();
     const r = vortex && (await vortex.shutdown());
     if (r) for (const st of r.steps) log('[server]', `${st.ok ? 'ok ' : 'FAIL'} ${st.step}: ${st.detail}`);
   } catch (e) {

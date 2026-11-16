@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.0-beta.1 — 2026-11-16
+
+Local beta build focused on live WebView recording. Hardware and Windows execution acceptance remain pending.
+
+- Added explicit Run & record for WebView tap, input replacement and clear, while retaining Add step only and replay assertions.
+- Added synchronous page/element/visibility/coverage checks before one DOM dispatch, using the same click and native-value-setter primitives as MobileWright 0.0.69.
+- Added persistent sanitized action receipts and recovery, request-ID deduplication, app/device checks and explicit handling of unknown outcomes. Completed actions survive capture failure without a second dispatch.
+- Added an owned loopback Mobilecli JSON-RPC front end so live values are sent in request bodies rather than CLI arguments. Only the owned front end is stopped on shutdown.
+- Added separate live sensitive-value and replay environment-reference controls, duplicate-step protection and regression coverage for interrupted responses, double clicks, DOM preconditions and Plain/POM replay.
+
 ## 4.0.0-beta.1 — 2026-11-16
 
 Local beta build; publication and physical-device acceptance remain pending.

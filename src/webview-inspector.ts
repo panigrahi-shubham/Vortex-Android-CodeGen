@@ -14,6 +14,7 @@ export function pageIdentity(url: string): string {
   try { const u = new URL(url); return u.origin === 'null' ? u.protocol + u.pathname : u.origin + u.pathname; }
   catch { throw webviewError('The WebView URL is invalid. Refresh and select the page again.'); }
 }
+export interface PreparedWebAction { step: UiStep; viewId: string; selector: string; expected: { url: string; tag: string; text: string; label: string }; }
 export type WebviewCall = (args: string[]) => Promise<unknown>;
 
 export function parseMobilecliReply(text: string): unknown {
@@ -109,6 +110,9 @@ export function createWebviewInspector(call: WebviewCall) {
       return snapshot;
     },
     async step(body: Record<string, unknown>, screenId: string | undefined): Promise<UiStep> {
+      return (await this.prepare(body, screenId)).step;
+    },
+    async prepare(body: Record<string, unknown>, screenId: string | undefined): Promise<PreparedWebAction> {
       const cached = snapshot;
       if (!cached || body.snapshotId !== cached.snapshotId || cached.screenId !== screenId) throw webviewError('The captured screen or WebView changed. Inspect the page again before adding a step.', 'STALE_WEBVIEW');
       if (!cached.ref) throw webviewError(cached.reason || 'This WebView cannot be mapped for replay.');
@@ -148,9 +152,10 @@ export function createWebviewInspector(call: WebviewCall) {
           args.expected = Number(body.expected);
         }
       }
-      return { id: randomUUID(), type, title: (node.label || node.text || node.domId || node.tag).slice(0, 100), args, pre: true, mode: 'name',
+      const step: UiStep = { id: randomUUID(), type, title: (node.label || node.text || node.domId || node.tag).slice(0, 100), args, pre: true, mode: 'name',
         target: { kind: 'css', parts: { by: 'css', value: node.selector }, warnings: node.warnings },
         context: 'WEBVIEW', webview: cached.ref, ...(secretEnv ? { secretEnv } : {}) };
+      return { step, viewId: cached.view.id, selector: node.selector, expected: { url: cached.dom.url, tag: node.tag, text: node.text, label: node.label } };
     },
   };
 }

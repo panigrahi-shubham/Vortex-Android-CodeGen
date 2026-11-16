@@ -164,7 +164,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
 </nav>
 <div id="restoreBanner" class="banner"><span id="restoreText"></span><button id="btnRestore" class="primary">Restore steps</button><button id="btnDiscard">Discard</button></div>
 <div id="discBanner" class="banner err"></div>
-<div class="row" style="padding:6px 20px"><span class="badge">Vortex 4.0 beta · MobileWright</span><label>Capture <select id="capturePolicy"><option value="fast">Fast · one fresh capture</option><option value="stable">Stable · compare consecutive trees</option></select></label><span id="captureTiming" class="mut"></span><span id="draftStatus" class="mut" role="status"></span></div>
+<div class="row" style="padding:6px 20px"><span class="badge">Vortex 5.0 beta · MobileWright</span><label>Capture <select id="capturePolicy"><option value="fast">Fast · one fresh capture</option><option value="stable">Stable · compare consecutive trees</option></select></label><span id="captureTiming" class="mut"></span><span id="draftStatus" class="mut" role="status"></span></div>
 <dialog id="stepEditor" style="width:min(650px,95vw)"><h3>Edit recorded step</h3><form id="stepEditForm"><label>Title<input id="editTitle" style="width:100%"></label><p id="editInputRow"><label>Replacement input text<input id="editText" style="width:100%"></label></p><p id="editExpectedRow"><label>Expected assertion value<input id="editExpected" style="width:100%"></label></p><p id="editWaitRow"><label>Wait (milliseconds)<input id="editWait" type="number" min="0" max="300000"></label></p><p><label>Comment<input id="editComment" style="width:100%"></label></p><div id="editAdbRow" hidden><label>ADB arguments (JSON array)<textarea id="editAdbArgs" rows="5" style="width:100%"></textarea></label><p class="mut">Keep &lt;secret&gt; in the sensitive argument slot; its value comes from the environment.</p><label>Command timeout (seconds)<input id="editAdbTimeout" type="number" min="1" max="300"></label></div><details><summary>Advanced: recorded locator</summary><p class="mut">ID, label, text, type or scoped locator parts. These edits affect replay; they never act on the phone.</p><textarea id="editLocator" rows="5" style="width:100%;font-family:monospace"></textarea></details><p class="row"><button type="submit" class="primary">Apply changes</button><button type="button" id="editCancel">Cancel</button></p><p id="editError" class="warn" role="alert"></p></form></dialog>
 
 <main>
@@ -284,7 +284,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
 <dialog id="wvDlg" class="wide" aria-labelledby="wvTitle">
   <div class="dlg">
     <div class="dlg-hd"><h2 id="wvTitle">WebView DOM inspector</h2><button id="wvFind">Find pages / refresh</button><button data-close>Close</button></div>
-    <p>Inspect DOM elements without tapping or typing on the phone. Add replay steps explicitly below. Native controls remain in the main inspector.</p>
+    <p>Inspect DOM elements, add replay steps, or explicitly choose Run & record for live actions. Native controls remain in the main inspector.</p>
     <div class="row"><label>Page <select id="wvPages" style="max-width:650px"><option value="">Choose an inspectable page</option></select></label><button id="wvInspect" disabled>Inspect page</button></div>
     <p id="wvStatus" class="note" role="status" aria-live="polite">Find pages to begin.</p>
     <p id="wvLimitations" class="mut">DOM bounds use CSS pixels; they are not Android screenshot coordinates.</p>
@@ -293,10 +293,13 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
       <div id="wvNodes" style="max-height:350px;overflow:auto"></div>
       <div><label>CSS selector<input id="wvSelector" readonly style="width:100%"></label><button id="wvCopy" disabled>Copy CSS</button><pre id="wvDetails" style="max-height:260px;overflow:auto;white-space:pre-wrap">Select a DOM element.</pre></div>
     </div>
+    <div class="row"><label>Action mode <select id="wvExecution"><option value="record">Add step only</option><option value="live">Run &amp; record</option></select></label><span class="mut">Run &amp; record acts on the app now. Assertions are added for replay.</span></div>
+    <div class="row"><button id="wvRecoverAction" hidden>Recover last action result</button><button id="wvAcknowledgeAction" hidden>I reviewed the outcome</button></div>
     <div id="wvActions">
       <div class="row"><button data-wv-action="tap" disabled>Add tap step</button><button data-wv-action="clear" disabled>Add clear step</button></div>
       <div class="row"><label><input type="checkbox" id="wvSensitive" checked> Sensitive input</label><label>Environment variable<input id="wvSecretEnv" value="VORTEX_SECRET_WEB_INPUT" maxlength="64"></label><label>Non-sensitive text<input id="wvInput" disabled maxlength="4096" autocomplete="off"></label><button data-wv-action="type" disabled>Add type step</button></div>
       <div class="row"><label>Check<select id="wvAssertion"><option value="visible">Visible</option><option value="text">Exact text</option><option value="contains">Contains text</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option><option value="count">Count</option></select></label><label>Expected<input id="wvExpected" maxlength="4096"></label><button data-wv-action="assert" disabled>Add assertion</button></div>
+      <p id="wvLiveInputRow" hidden><label>Value for this live action (not saved) <input id="wvLiveInput" type="password" maxlength="4096" autocomplete="off"></label></p>
     </div>
   </div>
 </dialog>
@@ -1230,7 +1233,9 @@ function stepsHtml(steps) {
 setupWebviewPanel({
   call,
   onScreen(screen) { S = screen; screenStale = false; render(); },
-  onStep(step) { addStep(step); toast('Added WebView replay step.'); },
+  onStep(step) { if (step.id && steps.some(s => s.id === step.id)) return; addStep(step); toast('Added WebView replay step.'); },
+  onInvalidate: discardDeviceTargets,
+  context() { return { appPackage: $('#pkg').value || S?.pkg, serial: S?.device || null }; },
 });
 
 // ---------- Runs ----------
