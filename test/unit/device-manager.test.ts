@@ -116,3 +116,29 @@ test('serials are validated before reaching adb', () => {
   assert.throws(() => assertSerial('abc; rm -rf /'), /invalid device serial/);
   assert.throws(() => assertSerial(''), /invalid device serial/);
 });
+
+// Connection commands must never become host-shell syntax or imply readiness from ADB's exit status.
+test('Wi-Fi connection validates its endpoint and requires a ready transport', async () => {
+  const { assertEndpoint } = await import('../../src/devices/device-manager.ts');
+  for (const invalid of ['-s other', 'host:0', 'host:65536', 'host:5555;echo x', 'https://host:5555', '[bad]:5555']) assert.throws(() => assertEndpoint(invalid));
+  assert.equal(assertEndpoint('[::1]:5555'), '[::1]:5555');
+  assert.equal(assertSerial('[::1]:5555'), '[::1]:5555');
+  const calls: string[][] = [];
+  let state = 'unauthorized';
+  const dm = createDeviceManager(async (args) => {
+    calls.push(args);
+    return args[0] === 'connect' ? 'connected to phone.example:5555' : `List of devices attached\nphone.example:5555 ${state}\n`;
+  });
+  await assert.rejects(dm.connect('phone.example:5555'), /authorization/);
+  state = 'device';
+  assert.equal((await dm.connect('phone.example:5555')).transport, 'network');
+  assert.deepEqual(calls[0], ['connect', 'phone.example:5555']);
+  const before = calls.length;
+  await assert.rejects(dm.connect('host:5555 && echo nope'));
+  assert.equal(calls.length, before);
+});
+
+test('a successful adb exit with a failed connection is not ready', async () => {
+  const dm = createDeviceManager(async (args) => args[0] === 'connect' ? 'failed to connect: refused' : 'List of devices attached\n');
+  await assert.rejects(dm.connect('phone.example:5555'), /refused/);
+});

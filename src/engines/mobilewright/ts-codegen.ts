@@ -1,7 +1,7 @@
 // MobileWright TypeScript generation from the shared recording model: Plain (one standalone spec) and
 // POM (pages, fixtures, data and a spec that reads like the recorded flow).
 //
-// Written against @mobilewright/test 0.0.66 and checked against its type definitions and runner:
+// Written against @mobilewright/test 0.0.69 and checked against its type definitions and runner:
 //  - getByText / getByLabel match EXACTLY by default, so `.nth(i)` uses the position among exact matches;
 //  - checks use the retrying matchers (toBeHidden, toBeDisabled, toHaveText, toContainText, toBeChecked,
 //    toBeSelected, toHaveCount, and `.not`), never one-shot reads;
@@ -17,7 +17,7 @@ import type { AssertionKind, LocatorParts, RecordedEvent, Recording, WebViewRef 
 import { validateAdbArgs, adbTransportArgs, adbTimeout } from '../../../public/adb-tools.js';
 
 export const MW_FORMAT = 'vortex-mobilewright v2';
-export const MW_VERIFIED_WITH = '@mobilewright/test 0.0.66';
+export const MW_VERIFIED_WITH = '@mobilewright/test 0.0.69';
 
 export const HARDWARE_BUTTONS = ['HOME', 'BACK', 'POWER', 'VOLUME_UP', 'VOLUME_DOWN', 'ENTER', 'DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT', 'DPAD_CENTER', 'APP_SWITCH', 'LOCK'];
 const KEY_ALIASES: Record<string, string> = { RECENT: 'APP_SWITCH', RECENTS: 'APP_SWITCH' };
@@ -289,7 +289,7 @@ function eventLines(e: RecordedEvent, ctx: Ctx, S: Style): string[] {
       break;
     }
     case 'hide_keyboard':
-      issue('MobileWright 0.0.66 has no hide-keyboard action. Record "Back" instead if that closes the keyboard in your app.');
+      issue('Vortex does not yet export a dedicated hide-keyboard action. Record "Back" instead if that closes the keyboard in your app.');
       break;
     case 'launch_app':
       out.push('await device.launchApp(bundleId);', 'appClosed = false;');
@@ -302,7 +302,7 @@ function eventLines(e: RecordedEvent, ctx: Ctx, S: Style): string[] {
       else out.push(`await device.openUrl(${ts(a.url)});`);
       break;
     case 'check_activity':
-      issue('MobileWright 0.0.66 reports the foreground app but not the activity, so this check cannot be written for it. Check an element that only this screen shows.');
+      issue('Vortex does not yet export native activity assertions. Check an element that only this screen shows.');
       break;
     case 'checkpoint': {
       const name = checkpointName(a.name);
@@ -344,7 +344,7 @@ function eventLines(e: RecordedEvent, ctx: Ctx, S: Style): string[] {
   return out;
 }
 
-const webKey = (e: RecordedEvent) => (e.context === 'WEBVIEW' ? JSON.stringify([e.webview?.testId ?? null, e.webview?.index ?? 0]) : null);
+const webKey = (e: RecordedEvent) => (e.context === 'WEBVIEW' ? JSON.stringify([e.webview?.testId ?? null, e.webview?.index ?? 0, e.webview?.url ?? null]) : null);
 
 function body(rec: Recording, ctx: Ctx, S: Style): string[] {
   const lines: string[] = [];
@@ -371,7 +371,15 @@ function body(rec: Recording, ctx: Ctx, S: Style): string[] {
     }
     if (/\bid\(/.test(webViewExpr(first.webview, ctx.pkg))) ctx.usesId = true;
     const w = first.webview;
-    lines.push(`// WebView${w?.title ? `: ${oneLine(w.title)}` : ''}${w?.url ? ` (${oneLine(w.url)})` : ''}`, '{', `  const web = await ${webViewExpr(w, ctx.pkg)}.page();`, ...S.webOpen(block).map((l) => '  ' + l), ...block.map((l) => (l ? '  ' + l : '')), '}');
+    const identityGuard: string[] = [];
+    if (w?.url) {
+      try {
+        const expected = new URL(w.url);
+        identityGuard.push('const inspectedPageUrl = new URL(web.url());',
+          `if (inspectedPageUrl.protocol !== ${ts(expected.protocol)} || inspectedPageUrl.origin !== ${ts(expected.origin)} || inspectedPageUrl.pathname !== ${ts(expected.pathname)}) throw new Error('WebView page differs from the recorded page. Inspect and record the intended context again.');`);
+      } catch { ctx.issues.push({ framework: 'mobilewright', variant: ctx.variant, step: first.seq, message: 'Recorded WebView URL is invalid. Inspect the page again.' }); }
+    }
+    lines.push(`// WebView${w?.title ? `: ${oneLine(w.title)}` : ''}${w?.url ? ` (${oneLine(w.url)})` : ''}`, '{', `  const web = await ${webViewExpr(w, ctx.pkg)}.page();`, ...identityGuard.map(l => '  ' + l), ...S.webOpen(block).map((l) => '  ' + l), ...block.map((l) => (l ? '  ' + l : '')), '}');
   }
   return lines;
 }

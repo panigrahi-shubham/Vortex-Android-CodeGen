@@ -1,16 +1,20 @@
 # Web content and visual fallback
 
-## Current inspector
+## V4 WebView DOM inspector
 
-The recorder inspects the hierarchy supplied by Mobilecli. A WebView may expose text, accessibility labels, IDs and editable controls. These can use normal MobileWright locators. A WebView that exposes only a rectangle needs an explicit coordinate action. The UI shows pixel and percentage points and warns that layout changes can move a coordinate target.
+The main recorder still inspects native accessibility through Mobilecli. The separate **WebView DOM** panel discovers inspectable pages using `mobilecli webview list` and evaluates a fixed read-only DOM collector in the explicitly selected page. It reuses the same daemon and serialized device lease. It does not create an Appium/Chromedriver session or download another driver. Real-device DOM inspection requires the default Mobilecli hierarchy source; mixing it with uiautomator or a custom tree command is rejected.
 
-The WebView badge relies on WebView classes present in the captured hierarchy. Mobilecli may flatten loaded web content into control nodes without retaining a WebView container, so an absent badge does not prove the screen has no web content. Inspect the controls actually exposed.
+The panel shows visible top-level elements, text/labels, DOM ids, enabled/editable state, candidate CSS selectors, actual match counts, and CSS bounds. Stable attributes are preferred when unique; positional DOM paths are marked for review. Each snapshot includes up to 400 visible candidate elements and scans at most 3000 candidates. Truncation and iframe counts are reported. Frames and shadow DOM are not traversed. DOM bounds use CSS pixels, independently of the Android screenshot geometry; the beta does not claim a synchronized overlay.
 
-This UI does not capture DOM, CSS or XPath. Debuggable builds alone do not enable those inspector capabilities. It does not manage browser contexts or download browser drivers. Do not advertise a coordinate tap as a verified CSS selector. Unexposed editable fields cannot currently be recorded as semantic Type actions.
+Choose **Add tap step**, **Add type step**, **Add clear step** or **Add assertion** to append to the recording. These buttons do not act on the device. Move through the real app manually when capturing subsequent pages; the saved steps execute only during replay. Each addition rechecks the page identity, element identity and unique CSS match. Refreshing the native screen, changing devices or navigating invalidates old captures. A locator unique now is not guaranteed to remain valid in a later session.
 
-## Existing web recordings
+Input values are not collected. Typing defaults to an environment-variable reference and password fields require one. Native screen images still show whatever the phone displays, as in previous versions. New recorded page identities contain only the URL origin/path (or protocol/path for local pages), omitting credentials, query strings and fragments. New DOM snapshot data remains in memory; only explicitly added step metadata is saved.
 
-The shared model and MobileWright generators retain supported web locator data in older recordings. Consecutive web steps generate the supported MobileWright web context block. Unsupported APIs and iframe paths produce generation errors. Integration coverage executes Native -> WebView -> Native in Plain and POM against a simulated device with a real headless Chromium page; this does not establish support for every production app/build.
+When several inspectable pages exist, the user selects one. Replay steps require native WebView count/bounds/order to agree with MobileWright's mapping; otherwise the panel permits inspection/copying and explains why recording is disabled. Plain/POM exports verify page protocol, origin and path before DOM actions. They reattach when recorded page identity changes. Existing recordings remain schema version 1 and do not need a migration.
+
+An empty discovery result means no inspectable page was exposed; it does not prove the app has no WebView. Check the foreground page and app's debugging availability. If a production WebView cannot expose DOM, use the native text/IDs actually supplied or an explicit coordinate action. A debuggable APK label alone does not prove DOM access. Known Mobilecli failures, missing installations and owner conflicts produce actionable errors; Vortex does not silently fall back to competing instrumentation.
+
+The mock Market Insights screen hosts the synthetic sample in real Chromium for DOM inspection and MobileWright replay tests. Native → WebView → Native and Plain/POM coverage use simulated devices; this is separate from physical-device validation.
 
 ## Visual tools
 

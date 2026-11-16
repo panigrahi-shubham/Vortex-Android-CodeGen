@@ -79,7 +79,7 @@ test('sensitive input is never stored: only the environment variable name is', (
   assert.throws(() => validateRecording({ ...rec, events: [{ ...rec.events[0], input: { secretEnv: 'X', text: 'leak' } }] }), /must not store its value/);
 });
 
-// Risk: generated MobileWright code uses APIs that do not exist in 0.0.66, or semantics that differ (substring nth).
+// Risk: generated MobileWright code uses APIs that do not exist in 0.0.69, or semantics that differ (substring nth).
 test('MobileWright: verified APIs, exact-match positions, retrying matchers, no placeholders', () => {
   assert.deepEqual(mwLocator({ by: 'text', value: 'Edit', index: 2 }, PKG, 'screen'), { code: "screen.getByText('Edit').nth(2)" });
   assert.deepEqual(mwLocator({ by: 'id', value: `${PKG}:id/row`, index: 0 }, PKG, 'screen'), { code: "screen.getByTestId(id('row')).nth(0)" });
@@ -261,15 +261,15 @@ test('MobileWright runner helpers: wrapper config, report parsing, failed step, 
   assert.equal(failedStepTs([f], 'no frames'), null);
 
   assert.equal(detectMobilewright(d).ok, false);
-  assert.match(detectMobilewright(d).installCommand!, /@mobilewright\/test@0\.0\.66/);
+  assert.match(detectMobilewright(d).installCommand!, /@mobilewright\/test@0\.0\.69/);
   fs.mkdirSync(path.join(d, 'node_modules/@mobilewright/test'), { recursive: true });
-  fs.writeFileSync(path.join(d, 'node_modules/@mobilewright/test/package.json'), '{"version":"0.0.66"}');
+  fs.writeFileSync(path.join(d, 'node_modules/@mobilewright/test/package.json'), '{"version":"0.0.69"}');
   fs.mkdirSync(path.join(d, 'node_modules/mobilewright/dist'), { recursive: true });
   fs.writeFileSync(path.join(d, 'node_modules/mobilewright/dist/cli.js'), '');
   fs.writeFileSync(path.join(d, 'mobilewright.config.ts'), 'export default {}');
   fs.mkdirSync(path.join(d, 'tests/m/c'), { recursive: true });
   const env = detectMobilewright(path.join(d, 'tests/m/c'));
-  assert.deepEqual([env.ok, env.projectDir, env.version, env.config], [true, d, '0.0.66', path.join(d, 'mobilewright.config.ts')]);
+  assert.deepEqual([env.ok, env.projectDir, env.version, env.config], [true, d, '0.0.69', path.join(d, 'mobilewright.config.ts')]);
 
   const code = (file: string) => {
     try {

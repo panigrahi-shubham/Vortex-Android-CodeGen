@@ -20,7 +20,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm install --prefix .vortex-ci --no-save @mobilewright/test@0.0.66
+      - run: npm install --prefix .vortex-ci --no-save @mobilewright/test@0.0.69
       - run: node .vortex-ci/node_modules/playwright/cli.js install --with-deps chromium
       - run: npm test
       - run: npm run typecheck

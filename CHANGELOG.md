@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.0.0-beta.1 — 2026-11-16
+
+Local beta build; publication and physical-device acceptance remain pending.
+
+- Added explicit WebView page discovery and selection through the existing Mobilecli daemon.
+- Added a separate searchable DOM inspector with real CSS match counts, locator alternatives, state and bounds in CSS pixels. Positional selectors and scan limits are visible.
+- Added record-only tap, type, clear and assertion controls, with element revalidation and stale-snapshot rejection. Input values are not collected and password steps require environment-variable references.
+- Added conservative native-to-WebView mapping and Plain/POM page-identity checks. New page references omit URL credentials, queries and fragments.
+- Retained MobileWright 0.0.69 and the earlier device connection/recovery work. Frames, shadow DOM and live execution from the DOM panel are outside this beta.
+
+## Earlier development — device connection and recovery
+
+- Target MobileWright 0.0.69 in runner setup, generated-code metadata and CI. Adapt the simulated driver to the new replace-text `fill()` contract while retaining append-only Quick type behavior.
+- Add device selection and recovery without restarting the recorder, with explicit Mobilecli alias selection, state-specific guidance, and stale-screen invalidation.
+- Add validated, already-paired Wi-Fi ADB connection addresses. Connecting does not silently change the selected phone; simulated mode refuses hardware connection commands.
+- Add unit and browser/API regression checks for device transitions, text replacement, endpoint validation and preserved selection on disconnect. Real hardware acceptance remains pending.
+
 ## 2.0.0-beta.1 — 2026-11-04
 
 MobileWright 2.0 beta. Physical-device unattended CRUD acceptance remains pending.

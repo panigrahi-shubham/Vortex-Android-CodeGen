@@ -1,6 +1,7 @@
 // ADB device discovery and device details (model, Android version, screen, density, CPU ABIs).
 // ABIs are reported exactly as the device lists them; nothing here guesses that a problem is caused by the ABI.
 
+import { isIP } from 'node:net';
 import { execFile } from 'node:child_process';
 
 export type Transport = 'usb' | 'emulator' | 'network' | 'unknown';
@@ -32,9 +33,32 @@ export interface DeviceDetails extends AdbDevice {
 const SERIAL = /^[A-Za-z0-9._:-]{1,128}$/;
 export const assertSerial = (s: unknown): string => {
   const v = String(s ?? '');
-  if (!SERIAL.test(v)) throw new Error(`invalid device serial: ${v}`);
+  if (!SERIAL.test(v)) {
+    try { if (assertEndpoint(v) !== v) throw new Error('untrimmed endpoint'); }
+    catch { throw new Error(`invalid device serial: ${v}`); }
+  }
   return v;
 };
+
+/** Explicit, already-paired Wi-Fi debugging endpoint; never shell syntax or a URL. */
+export function assertEndpoint(value: unknown): string {
+  const v = typeof value === 'string' ? value.trim() : '';
+  const m = /^(\[[0-9a-fA-F:]+\]|[A-Za-z0-9][A-Za-z0-9.-]{0,252}):(\d{1,5})$/.exec(v);
+  const port = m ? Number(m[2]) : 0;
+  if (!m || port < 1 || port > 65535 || (m[1].startsWith('[') && isIP(m[1].slice(1, -1)) !== 6)) {
+    throw Object.assign(new Error('Use an ADB connection address such as 192.168.1.40:5555 or phone.example:5555 (already paired).'), { httpStatus: 400 });
+  }
+  return v;
+}
+
+export function connectionHint(state: string): string {
+  if (state === 'device') return 'Ready. Select this device, then refresh its screen.';
+  if (state === 'unauthorized' || state === 'authorizing') return 'Unlock the phone and accept its debugging authorization prompt.';
+  if (state === 'offline') return 'Reconnect this device or check its Wi-Fi debugging address, then choose Recover.';
+  if (state === 'no permissions') return 'The host cannot access this USB device. Check Android USB permissions on the host.';
+  if (state === 'missing') return 'The selected device is missing. Reconnect that same device; another phone will not be selected automatically.';
+  return `Device state: ${state}. Wait until ADB reports it ready.`;
+}
 
 /** Parses `adb devices -l`. */
 export function parseAdbDevices(out: string): AdbDevice[] {
@@ -53,7 +77,7 @@ export function parseAdbDevices(out: string): AdbDevice[] {
     let transport: Transport = 'unknown';
     if (/^emulator-\d+$/.test(serial)) transport = 'emulator';
     else if (kv.usb) transport = 'usb';
-    else if (/^[\d.]+:\d+$/.test(serial) || serial.includes('._adb-tls-connect.')) transport = 'network';
+    else if (/^(?:[A-Za-z0-9.-]+|\[[0-9a-fA-F:]+\]):\d+$/.test(serial) || serial.includes('._adb-tls-connect.')) transport = 'network';
     devices.push({ serial, state, transport, model: kv.model ?? null, product: kv.product ?? null, deviceName: kv.device ?? null, transportId: kv.transport_id ?? null });
   }
   return devices;
@@ -131,6 +155,15 @@ export function createDeviceManager(adb: Adb = defaultAdb) {
   return {
     async list(): Promise<AdbDevice[]> {
       return parseAdbDevices(await adb(['devices', '-l']));
+    },
+    async connect(endpoint: unknown): Promise<AdbDevice> {
+      const address = assertEndpoint(endpoint);
+      const response = await adb(['connect', address]);
+      const found = (await this.list()).find((d) => d.serial === address);
+      if (!found || found.state !== 'device') {
+        throw Object.assign(new Error(found ? connectionHint(found.state) : `Connection not ready: ${response.trim().slice(0, 500)}. Check reachability and pairing on the device host.`), { httpStatus: 409 });
+      }
+      return found;
     },
     async details(serial: string): Promise<DeviceDetails> {
       assertSerial(serial);

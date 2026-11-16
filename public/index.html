@@ -153,6 +153,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
   <button id="btnTools" class="hbtn" title="Inspect controls, devices, benchmarks, setup check">Tools &#9662;</button>
   <button id="btnHelp" class="hbtn" title="How to use the recorder, keyboard shortcuts (?)">?</button>
   <button id="btnInspector" class="hbtn">Inspect controls</button>
+  <button id="btnWebview" class="hbtn">WebView DOM</button>
   <button id="btnAdb" class="hbtn">ADB shortcuts</button>
   <button id="btnDevices" class="hbtn" style="display:none">Devices</button>
 </header>
@@ -163,7 +164,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
 </nav>
 <div id="restoreBanner" class="banner"><span id="restoreText"></span><button id="btnRestore" class="primary">Restore steps</button><button id="btnDiscard">Discard</button></div>
 <div id="discBanner" class="banner err"></div>
-<div class="row" style="padding:6px 20px"><span class="badge">MobileWright 2.0 beta</span><label>Capture <select id="capturePolicy"><option value="fast">Fast · one fresh capture</option><option value="stable">Stable · compare consecutive trees</option></select></label><span id="captureTiming" class="mut"></span><span id="draftStatus" class="mut" role="status"></span></div>
+<div class="row" style="padding:6px 20px"><span class="badge">Vortex 4.0 beta · MobileWright</span><label>Capture <select id="capturePolicy"><option value="fast">Fast · one fresh capture</option><option value="stable">Stable · compare consecutive trees</option></select></label><span id="captureTiming" class="mut"></span><span id="draftStatus" class="mut" role="status"></span></div>
 <dialog id="stepEditor" style="width:min(650px,95vw)"><h3>Edit recorded step</h3><form id="stepEditForm"><label>Title<input id="editTitle" style="width:100%"></label><p id="editInputRow"><label>Replacement input text<input id="editText" style="width:100%"></label></p><p id="editExpectedRow"><label>Expected assertion value<input id="editExpected" style="width:100%"></label></p><p id="editWaitRow"><label>Wait (milliseconds)<input id="editWait" type="number" min="0" max="300000"></label></p><p><label>Comment<input id="editComment" style="width:100%"></label></p><div id="editAdbRow" hidden><label>ADB arguments (JSON array)<textarea id="editAdbArgs" rows="5" style="width:100%"></textarea></label><p class="mut">Keep &lt;secret&gt; in the sensitive argument slot; its value comes from the environment.</p><label>Command timeout (seconds)<input id="editAdbTimeout" type="number" min="1" max="300"></label></div><details><summary>Advanced: recorded locator</summary><p class="mut">ID, label, text, type or scoped locator parts. These edits affect replay; they never act on the phone.</p><textarea id="editLocator" rows="5" style="width:100%;font-family:monospace"></textarea></details><p class="row"><button type="submit" class="primary">Apply changes</button><button type="button" id="editCancel">Cancel</button></p><p id="editError" class="warn" role="alert"></p></form></dialog>
 
 <main>
@@ -280,9 +281,35 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
   </div>
 </dialog>
 
+<dialog id="wvDlg" class="wide" aria-labelledby="wvTitle">
+  <div class="dlg">
+    <div class="dlg-hd"><h2 id="wvTitle">WebView DOM inspector</h2><button id="wvFind">Find pages / refresh</button><button data-close>Close</button></div>
+    <p>Inspect DOM elements without tapping or typing on the phone. Add replay steps explicitly below. Native controls remain in the main inspector.</p>
+    <div class="row"><label>Page <select id="wvPages" style="max-width:650px"><option value="">Choose an inspectable page</option></select></label><button id="wvInspect" disabled>Inspect page</button></div>
+    <p id="wvStatus" class="note" role="status" aria-live="polite">Find pages to begin.</p>
+    <p id="wvLimitations" class="mut">DOM bounds use CSS pixels; they are not Android screenshot coordinates.</p>
+    <div class="row"><label>Search DOM <input id="wvSearch" placeholder="Text, label, DOM id or CSS"></label><span id="wvCount" class="mut"></span></div>
+    <div style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(240px,1fr);gap:12px">
+      <div id="wvNodes" style="max-height:350px;overflow:auto"></div>
+      <div><label>CSS selector<input id="wvSelector" readonly style="width:100%"></label><button id="wvCopy" disabled>Copy CSS</button><pre id="wvDetails" style="max-height:260px;overflow:auto;white-space:pre-wrap">Select a DOM element.</pre></div>
+    </div>
+    <div id="wvActions">
+      <div class="row"><button data-wv-action="tap" disabled>Add tap step</button><button data-wv-action="clear" disabled>Add clear step</button></div>
+      <div class="row"><label><input type="checkbox" id="wvSensitive" checked> Sensitive input</label><label>Environment variable<input id="wvSecretEnv" value="VORTEX_SECRET_WEB_INPUT" maxlength="64"></label><label>Non-sensitive text<input id="wvInput" disabled maxlength="4096" autocomplete="off"></label><button data-wv-action="type" disabled>Add type step</button></div>
+      <div class="row"><label>Check<select id="wvAssertion"><option value="visible">Visible</option><option value="text">Exact text</option><option value="contains">Contains text</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option><option value="count">Count</option></select></label><label>Expected<input id="wvExpected" maxlength="4096"></label><button data-wv-action="assert" disabled>Add assertion</button></div>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="devDlg" aria-labelledby="devTitle">
   <div class="dlg">
-    <div class="dlg-hd"><h2 id="devTitle">Devices</h2><button id="devRefresh">Refresh</button><button data-close>Close</button></div>
+    <div class="dlg-hd"><h2 id="devTitle">Device connection</h2><button id="devRefresh">Refresh</button><button data-close>Close</button></div>
+    <p>USB devices must be connected to the machine running Vortex. For Wi-Fi debugging, pair on that host first, then enter the connection address below.</p>
+    <form id="devConnectForm"><label>Wi-Fi ADB address <input id="devEndpoint" placeholder="192.168.1.40:5555" maxlength="260" required></label> <button id="devConnect" type="submit">Connect</button></form>
+    <p><label>Mobilecli alias (optional) <input id="devAlias" maxlength="128" placeholder="Use only when different from ADB serial"></label></p>
+    <div id="devStatus" class="note" role="status" aria-live="polite"></div>
+    <button id="devRecover" disabled>Recover selected device</button>
+    <p class="mut">Selection applies to this recorder session. Recovery keeps recorded steps and requires a fresh screen before more actions.</p>
     <div id="devList">Loading...</div>
     <div id="devDetails"></div>
   </div>
@@ -359,6 +386,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
 <script type="module">
 import { editStep, moveStep, duplicateStep, hitCandidates, ambiguousHit, reviewRecording, safeDraft } from '/recording-tools.js';
 import { findEditableInput } from '/input-controls.js';
+import { setupWebviewPanel } from '/webview-panel.js';
 import { ADB_PRESETS, parseAdbCommand, formatAdbCommand } from '/adb-tools.js';
 const $ = (s) => document.querySelector(s);
 const MODES = [
@@ -461,7 +489,7 @@ function render() {
   const wv = S.nodes.filter((n) => /WebView/.test(n.type)).length;
   $('#wvBadge').textContent = wv ? 'WebView on screen (' + wv + ')' : '';
   $('#wvBadge').style.display = wv ? '' : 'none';
-  $('#webStatus').textContent = S.previewOnly ? 'Screenshot preview only. Refresh screen to inspect current controls.' : S.stale ? 'Screen capture failed. Refresh before recording.' : wv ? 'WebView: inspect exposed text and IDs below. Unexposed content can use an explicit coordinate tap.' : 'Text / ID / accessibility locators from the captured screen';
+  $('#webStatus').textContent = S.previewOnly ? 'Screenshot preview only. Refresh screen to inspect current controls.' : S.stale ? 'Screen capture failed. Refresh before recording.' : wv ? 'WebView: inspect native accessibility below, or open WebView DOM for inspectable page content.' : 'Text / ID / accessibility locators from the captured screen';
   if (S.pkgChangedFrom) toast('Package changed from ' + S.pkgChangedFrom + ' to ' + S.pkg + ' (the app that is on screen).');
   if (document.activeElement !== $('#pkg')) $('#pkg').value = S.pkg;
   if (!S.appVisible && !S.previewOnly) toast('The app "' + S.pkg + '" is not on screen. Open it on the phone, or fix the Package field, then Refresh.', true);
@@ -975,7 +1003,7 @@ function regenerate() {
     if (fw === 'legacy') {
       // The original single-file format, unchanged (src/codegen.js).
       showIssues(null); $('#fileTabs').innerHTML = ''; $('#saveWhere').textContent = '';
-      try { const r = await api('/api/generate', { steps: stepPayload(), name: $('#tname').value, pkg: $('#pkg').value || (S && S.pkg) }); PREVIEW = { files: [{ path: 'legacy.spec.ts', content: r.code }], active: 'legacy.spec.ts' }; $('#code').value = r.code; } catch (e) { toast(e.message, true); }
+      try { const r = await api('/api/generate', { steps: stepPayload(), name: $('#tname').value, pkg: $('#pkg').value || (S && S.pkg) }); PREVIEW = { files: [{ path: 'legacy.spec.ts', content: r.code }], active: 'legacy.spec.ts' }; $('#code').value = r.code; } catch (e) { PREVIEW = { files: [], active: null }; $('#code').value = ''; showIssues([{ step: 1, message: e.message }]); toast(e.message, true); }
       return;
     }
     const r = await call('/api/project/preview', projectBody());
@@ -1088,7 +1116,8 @@ $('#btnSave').onclick = async () => {
   if ($('#fw').value !== 'legacy') return saveProject([]);
   try {
     const used = new Set(steps.filter((s) => s.asset).map((s) => s.asset));
-    const r = await api('/api/save', { name: $('#tname').value, code: $('#code').value, assets: assets.filter((a) => used.has(a.name)) });
+    const current = await api('/api/generate', { steps: stepPayload(), name: $('#tname').value, pkg: $('#pkg').value || S?.pkg });
+    const r = await api('/api/save', { name: $('#tname').value, code: current.code, assets: assets.filter((a) => used.has(a.name)) });
     toast('Saved: ' + r.file);
     autosave(true);
   } catch (e) { toast(e.message, true); }
@@ -1197,6 +1226,12 @@ const fmtTime = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 function stepsHtml(steps) {
   return '<ul class="steps-report">' + steps.map((s) => `<li class="${s.ok ? 'ok' : 'no'}">${s.ok ? '&#10003;' : '&#10007;'} ${esc(s.step)}: <span style="color:var(--txt)">${esc(s.detail)}</span></li>`).join('') + '</ul>';
 }
+
+setupWebviewPanel({
+  call,
+  onScreen(screen) { S = screen; screenStale = false; render(); },
+  onStep(step) { addStep(step); toast('Added WebView replay step.'); },
+});
 
 // ---------- Runs ----------
 let RUN = null;     // { id, next }
@@ -1405,16 +1440,50 @@ $('#btnRuns').onclick = async () => { $('#runDlg').showModal(); await runsLoad(f
 
 // ---------- Devices ----------
 async function devLoad() {
-  const r = await call('/api/devices');
+  const r = await call('/api/connection');
   if (!r.ok) { $('#devList').innerHTML = `<div class="note err">${esc(r.data.error || 'Could not list devices')}</div>`; return null; }
   const { devices, current } = r.data;
+  $('#devStatus').textContent = (r.data.mock ? 'Simulated mode. Start without --mock for physical devices. ' : '') + r.data.hint;
+  $('#devConnect').disabled = r.data.mock;
+  $('#devEndpoint').disabled = r.data.mock;
+  $('#devRecover').disabled = r.data.mock || !current;
+  $('#devAlias').value = '';
+  $('#devAlias').placeholder = r.data.mobilecliDevice ? 'Current: ' + r.data.mobilecliDevice + ' (enter alias for a new selection)' : 'Use only when different from ADB serial';
   $('#devList').innerHTML = devices.length ? '<table class="devs"><thead><tr><th>Serial</th><th>State</th><th>Connection</th><th>Model</th><th></th></tr></thead><tbody>' +
-    devices.map((d) => `<tr><td>${esc(d.serial)}${d.serial === current ? ' <span class="badge good">recording</span>' : ''}</td><td>${d.state === 'device' ? '<span class="badge good">ready</span>' : `<span class="badge warn">${esc(d.state)}</span>`}</td><td>${esc(d.transport)}</td><td>${esc(d.model || '')}</td><td>${d.state === 'device' ? `<button data-dev="${esc(d.serial)}">Details</button>` : ''}</td></tr>`).join('') +
-    '</tbody></table><p class="mut" style="margin:6px 0 0">To record on a different device, restart the recorder with <code>--device &lt;serial&gt;</code>.</p>'
-    : '<div class="note warn">No devices found. Check the cable, USB debugging and <code>adb devices</code>.</div>';
+    devices.map((d) => `<tr><td>${esc(d.serial)}${d.serial === current ? ' <span class="badge good">recording</span>' : ''}</td><td>${d.state === 'device' ? '<span class="badge good">ready</span>' : `<span class="badge warn">${esc(d.state)}</span>`}<br><small>${esc(d.hint || '')}</small></td><td>${esc(d.transport)}</td><td>${esc(d.model || '')}</td><td>${d.state === 'device' ? `<button data-dev="${esc(d.serial)}">Details</button> ${!r.data.mock ? `<button data-select-device="${esc(d.serial)}">${d.serial === current ? 'Select again' : 'Select'}</button>` : ''}` : ''}</td></tr>`).join('') +
+    '</tbody></table>'
+    : '<div class="note warn">No devices found on this host. Check USB debugging or connect an already-paired Wi-Fi device above.</div>';
   return r.data;
 }
+function discardDeviceTargets() {
+  screenStale = true;
+  if (S) { S = { ...S, nodes: [], stale: true }; resetInspection(); $('#ov').innerHTML = ''; }
+  $('#webStatus').textContent = 'Device connection changed. Refresh screen before recording more actions.';
+}
+let deviceConnecting = false;
+async function deviceOperation(path, body, invalidates) {
+  if (deviceConnecting || busy) return;
+  deviceConnecting = true;
+  $('#devStatus').textContent = 'Checking device connection...';
+  if (invalidates) discardDeviceTargets();
+  try {
+    const r = await call(path, body);
+    if (!r.ok) { $('#devStatus').textContent = r.data.error || 'Connection failed. Check the address and authorization.'; return; }
+    await devLoad();
+    if (r.data.refreshRequired) {
+      $('#devBadge').textContent = r.data.current;
+      $('#discBanner').style.display = 'none';
+      $('#devStatus').textContent = 'Selected ' + r.data.current + '. Refresh screen to continue; recorded steps are kept.';
+    }
+    if (r.data.connected) $('#devStatus').textContent = 'Connected ' + r.data.connected + '. Select it below to use it.';
+  } catch (error) { $('#devStatus').textContent = error.message; }
+  finally { deviceConnecting = false; }
+}
+$('#devConnectForm').onsubmit = (event) => { event.preventDefault(); deviceOperation('/api/connection/connect', { endpoint: $('#devEndpoint').value }, false); };
+$('#devRecover').onclick = () => deviceOperation('/api/connection/recover', ($('#devAlias').value.trim() ? { mobilecliDevice: $('#devAlias').value.trim() } : {}), true);
 $('#devList').addEventListener('click', async (e) => {
+  const selection = e.target.closest('[data-select-device]');
+  if (selection) return deviceOperation('/api/connection/select', { serial: selection.dataset.selectDevice, mobilecliDevice: $('#devAlias').value.trim() }, true);
   const b = e.target.closest('[data-dev]'); if (!b) return;
   $('#devDetails').innerHTML = 'Reading device...';
   const r = await call('/api/devices/details?serial=' + encodeURIComponent(b.dataset.dev));
@@ -1438,10 +1507,11 @@ $('#devRefresh').onclick = () => devLoad();
 let devMock = false;
 async function devWatch() {
   if (devMock || document.hidden) return;
-  const r = await call('/api/devices').catch(() => null);
+  const r = await call('/api/connection').catch(() => null);
   const ban = $('#discBanner');
-  if (r && r.ok && r.data.current && r.data.currentConnected === false) {
-    ban.textContent = `Phone ${r.data.current} is disconnected. Your ${steps.length} recorded step(s) are kept (also saved in this browser). Reconnect it, then press Refresh screen.`;
+  if (r && r.ok && r.data.current && r.data.state !== 'device') {
+    discardDeviceTargets();
+    ban.textContent = `Phone ${r.data.current} is ${r.data.state}. Your ${steps.length} recorded step(s) are kept (also saved in this browser). Reconnect it, then press Refresh screen.`;
     ban.style.display = 'flex';
   } else ban.style.display = 'none';
 }

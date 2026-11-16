@@ -23,7 +23,7 @@ import { journalBegin, journalEnd } from '../run-journal.ts';
 import { diagnoseFailure, type FailureDiagnosis } from '../../reports/diagnosis.ts';
 import { maskSecrets } from '../../reports/secrets.ts';
 
-export const MW_PINNED = '0.0.66';
+export const MW_PINNED = '0.0.69';
 
 export interface MobilewrightEnv {
   ok: boolean;

@@ -173,6 +173,10 @@ export default class FakeMobilewrightDriver {
     this.#log('typeText', { length: String(text).length });
     if (this.focused !== null) this.typed.set(this.focused, (this.typed.get(this.focused) ?? '') + text);
   }
+  async fill(text) {
+    await this.clearText();
+    await this.typeText(text);
+  }
   async clearText() {
     this.#log('clearText');
     if (this.focused !== null) this.typed.set(this.focused, '');

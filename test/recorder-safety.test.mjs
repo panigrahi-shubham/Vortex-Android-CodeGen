@@ -86,3 +86,23 @@ test('occupied UI port rejects startup before recovery touches pending journals'
     fs.rmSync(state, { recursive: true, force: true });
   }
 });
+
+
+test('simulated driver fill replaces existing text, clears empty values, and keeps typing append-only', async () => {
+  const { default: Driver } = await import('./fixtures/fake-mobilewright-driver.mjs');
+  const driver = new Driver();
+  driver.focused = 'input';
+  driver.typed.set('input', 'old value');
+  await driver.fill('replacement');
+  assert.equal(driver.typed.get('input'), 'replacement');
+  await driver.typeText(' appended');
+  assert.equal(driver.typed.get('input'), 'replacement appended');
+  await driver.fill('');
+  assert.equal(driver.typed.get('input'), '');
+});
+
+
+test('legacy export rejects WebView DOM steps instead of dropping their context', async () => {
+  const { generate } = await import('../src/codegen.js');
+  assert.throws(() => generate([{ type: 'tap', context: 'WEBVIEW', target: { parts: { by: 'css', value: '#button' } } }], { name: 'web', bundleId: 'com.example.app' }), /Plain or POM/);
+});

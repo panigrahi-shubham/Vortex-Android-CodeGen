@@ -1,10 +1,10 @@
 # Vortex Android Recorder
 
-**v2.0.0-beta.1 — MobileWright inspector and recorder.** Adds ADB shortcuts with editable arguments and timeouts, screenshot-only previews, whole-value focused typing, expanded Inspect copying and complete script copying. Includes the recording editor, before/after checks, browser/server drafts and guarded Plain/POM replay. See [2.0 release notes](docs/V2_RELEASE.md) and the [20-scenario acceptance checklist](docs/ACCEPTANCE_20.md). Unattended physical-device CRUD acceptance remains pending.
+**v4.0.0-beta.1 — WebView DOM inspection.** Discover inspectable pages, choose a context, search visible DOM elements, copy verified CSS selectors, and add WebView replay steps from a separate inspector. Uses MobileWright 0.0.69 and includes device connection/recovery from the V3 development work. See [V4 notes](docs/V4_RELEASE.md). This is a local beta build; physical-device acceptance remains pending.
 
 Local Android inspector, recorder and code generator for MobileWright. Requires Node.js 22.18 or newer, Android platform-tools on PATH, and a USB/Wi-Fi debugging connection. Replay uses the installed MobileWright project; Vortex does not download a runner on demand.
 
-Download the [2.0 beta Windows release and checksum](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/releases/tag/v2.0.0-beta.1). The ZIP contains the recorder, launchers, samples, documentation and the StockPilot smoke example; Node.js, ADB and the replay runner are installed separately.
+Build the V4 Windows ZIP and checksum with `npm run package:windows`; output is under `dist/`. Node.js, ADB and the replay runner are installed separately. The [published V2 archive](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/releases/tag/v2.0.0-beta.1) is an older release and does not contain V4 features.
 
 ## Start
 
@@ -13,7 +13,7 @@ Install this project's development dependencies with npm install. In the output 
     mkdir generated
     cd generated
     npm init -y
-    npm install -D @mobilewright/test@0.0.66
+    npm install -D @mobilewright/test@0.0.69
     cd ..
     npm start -- --out generated --pkg com.example.yourapp --device YOUR_ADB_SERIAL
 
@@ -26,6 +26,14 @@ If Mobilecli names your emulator differently from ADB, supply its ID separately.
 This avoids a custom shell tree command. Get Mobilecli IDs with `node generated/node_modules/mobilecli/index.js devices --platform android`. ADB commands continue to use the transport serial. The PowerShell launcher accepts `-Device` and `-MobilecliDevice` too.
 
 If the recorder is already running, open its existing window. A duplicate start reports the occupied port without recovering or stopping the existing recorder's work.
+
+## Device connection and recovery
+
+The development runner targets MobileWright **0.0.69**. Open **Tools → Devices** to refresh the device list, select a ready device without restarting Vortex, or recover the selected device after reconnecting it. Missing, offline and unauthorized devices show specific guidance. Recovery discards old screen targets and requires **Refresh screen** before recording more actions; it keeps existing recorded steps and never silently chooses another phone. An optional Mobilecli alias can be supplied for a new selection; otherwise it uses the ADB serial.
+
+For an already-paired Wi-Fi debugging device, enter its **connection address** (for example `192.168.1.40:5555`) and choose **Connect**, then explicitly **Select** it. Pair the device on the Vortex host separately; the panel does not collect pairing credentials or enable debugging. The connection must be reachable from the machine running Vortex. A USB phone attached to your own computer is not automatically available inside a cloud environment. Selection and aliases apply to the current server session; use `--device` and `--mobilecli-device` to set startup defaults.
+
+Mock mode displays simulated devices and refuses physical connection commands. These features are included in V4. Physical-device acceptance remains pending; the [historical V3 roadmap](docs/V3_ROADMAP.md) records the earlier proposals.
 
 ## Inspect and record
 
@@ -55,7 +63,11 @@ Inspect offers copies of the locator, ID, text, class, bounds/details, pixels, p
 
 ## Web content
 
-WebView content can expose text, IDs and editable controls through Mobilecli. Inspect these like other controls. If a WebView exposes only a rectangle, use an explicit coordinate action. This recorder does not capture a DOM or discover CSS/XPath selectors. A debug build alone does not add DOM inspection to this UI. Older recordings with supported web locator data can still generate MobileWright code; see docs/WEBVIEW_AND_VISUAL.md.
+Open **WebView DOM → Find pages / refresh**, explicitly choose a page, and select **Inspect page**. The panel reads visible top-level DOM elements using the existing Mobilecli connection. Search by text, label, DOM id or CSS; select an element to see its locator, actual match count, state, CSS bounds and alternative selectors. Copy CSS or explicitly add a tap, type, clear or assertion step. **Adding a step does not execute it on the phone.** Navigate on the phone when needed, then find/inspect again; execute the saved flow through replay.
+
+Typing defaults to an environment-variable reference. Password fields require one, and the inspector does not read field values. New WebView recording metadata omits URL credentials, query strings and fragments. Adding steps revalidates the page and locator; a changed native capture invalidates the DOM snapshot. Plain/POM replay checks the recorded page origin and path before using its DOM locators.
+
+No exposed page means DOM inspection is unavailable, not that the app has no WebView. Native accessibility inspection and explicit coordinates remain available. Several pages require reliable native-to-page mapping before replay steps can be added. Frame and shadow DOM contents are not traversed in this beta; positional CSS carries a warning. DOM bounds are CSS pixels and are not painted over Android screenshot coordinates. See [WebView details](docs/WEBVIEW_AND_VISUAL.md).
 
 ## Save and replay
 

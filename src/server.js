@@ -52,12 +52,23 @@ const drafts = createDraftStore(opts.stateDir);
 // Project, run and device services need Node.js 22.18+ (TypeScript type stripping).
 // On older Node the recorder itself keeps working; only those panels report that they are unavailable.
 let vortex = null;
+let connectionDevices;
+let webviews;
+let webviewRead;
+let mockWebHost;
+let connectionHint;
+let assertConnectionSerial;
 let vortexUnavailable = null;
 let ready = false;
 let recorderOwner;
 let stateOwner;
 async function initialize() {
   try {
+  const { createDeviceManager, connectionHint: hint, assertSerial } = await import('./devices/device-manager.ts');
+  connectionDevices = createDeviceManager(); connectionHint = hint; assertConnectionSerial = assertSerial;
+  const { createWebviewInspector, runMobilecliRead } = await import('./webview-inspector.ts');
+  webviewRead = runMobilecliRead;
+  webviews = createWebviewInspector(readWebview);
   const { createVortex } = await import('./vortex/index.ts');
   vortex = await createVortex({ root: ROOT, stateDir: opts.stateDir, mock: opts.mock, log });
   } catch (e) {
@@ -90,6 +101,19 @@ async function getDevice() {
   return device;
 }
 
+async function readWebview(args) {
+  if (opts.mock) {
+    const fixture = await import('../test/fixtures/webview-host.mjs');
+    if (args[0] === 'list') return (state.raw || []).some(n => /WebView$/i.test(n.type))
+      ? [{ id: 'sample-insights', url: fixture.WEBVIEW.url, title: fixture.WEBVIEW.title, bounds: fixture.WEBVIEW.nativeBounds }] : [];
+    if (!mockWebHost) mockWebHost = await fixture.openWebView(path.join(ROOT, 'samples'));
+    return mockWebHost.page.evaluate(args[2]);
+  }
+  const dev = await getDevice();
+  if (dev.source !== 'mobilecli' || opts.treeCmd !== 'mobilecli dump ui') throw Object.assign(new Error('DOM inspection uses the existing Mobilecli owner. Start with the default tree command and --tree-source mobilecli; do not mix it with uiautomator or another inspector.'), { httpStatus: 409, code: 'WEBVIEW_SOURCE_CONFLICT' });
+  return webviewRead(localMobilecli(), opts.mobilecliDevice || dev.serial, args);
+}
+
 async function withRecorder(fn) {
   return oneAtATime(async () => {
     const dev = await getDevice();
@@ -98,6 +122,22 @@ async function withRecorder(fn) {
     try { result = await fn(); } finally { release?.(); }
     return result;
   });
+}
+
+function invalidateConnectionScreen() {
+  state = { nodes: [], raw: [], size: state.size, invalid: true, screenId: randomUUID() };
+}
+
+async function connectionStatus() {
+  let devices;
+  try { devices = opts.mock ? [{ serial: 'mock-device', state: 'device', transport: 'simulated', model: 'Sample phone' }] : await connectionDevices.list(); }
+  catch (error) { invalidateConnectionScreen(); throw error; }
+  const current = currentSerial();
+  const selected = devices.find(d => d.serial === current);
+  if ((current && !selected) || (selected && selected.state !== 'device')) invalidateConnectionScreen();
+  return { mock: opts.mock, current, mobilecliDevice: opts.mobilecliDevice, state: selected?.state || (current ? 'missing' : 'unselected'),
+    devices: devices.map(d => ({ ...d, hint: connectionHint(d.state) })),
+    hint: selected ? connectionHint(selected.state) : current ? connectionHint('missing') : 'Select a ready device. Local USB devices must be attached to this server; cloud use needs a reachable debugging address.' };
 }
 
 function pngSize(buf) {
@@ -220,7 +260,7 @@ async function settle(dev, maxMs = 8000) {
 async function action(body) {
   const dev = await getDevice();
   const began=performance.now();
-  if (state.invalid && body.kind!=='adb_command') throw Object.assign(new Error('The last screen capture failed. Refresh before recording another action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
+  if (state.invalid && body.kind!=='adb_command') throw Object.assign(new Error('The screen is no longer current. Refresh before recording another action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
   if (body.screenId && body.screenId !== state.screenId) throw Object.assign(new Error('The screen changed in another view. Refresh before recording this action.'), { httpStatus: 409, code: 'STALE_SCREEN' });
   const before = state.nodes;
   const beforeShot = state.shot;
@@ -333,6 +373,63 @@ const server = http.createServer(async (req, res) => {
     return json(res, 403, { error: blocked });
   }
   try {
+    if (url.pathname.startsWith('/api/webviews')) {
+      if (!vortex || !webviews) return json(res, 501, { error: vortexUnavailable || 'WebView services unavailable.' });
+      if (req.method === 'GET' && url.pathname === '/api/webviews') return json(res, 200, await withRecorder(async () => {
+        webviews.invalidate();
+        const screen = await capture();
+        const pages = await webviews.list();
+        return { pages, screen, simulated: opts.mock, message: pages.length ? 'Choose the page to inspect. No page is selected automatically.' : 'No inspectable WebView page is exposed. Open the app page and check WebView debugging availability. Native inspection and explicit coordinates remain available.' };
+      }));
+      if (req.method === 'POST' && url.pathname === '/api/webviews/inspect') {
+        const body = await readBody(req);
+        return json(res, 200, await withRecorder(async () => {
+          const screen = await capture();
+          return { ...(await webviews.inspect(body.id, state.screenId, state.raw)), screen, simulated: opts.mock };
+        }));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/webviews/step') {
+        const body = await readBody(req);
+        return json(res, 200, await withRecorder(async () => ({ step: await webviews.step(body, state.invalid ? undefined : state.screenId), recordOnly: true })));
+      }
+      return json(res, 404, { error: 'Unknown WebView inspection operation.' });
+    }
+    if (url.pathname.startsWith('/api/connection')) {
+      if (!vortex || !connectionDevices) return json(res, 501, { error: vortexUnavailable || 'Device services unavailable.' });
+      if (req.method === 'GET' && url.pathname === '/api/connection') {
+        return json(res, 200, await oneAtATime(connectionStatus));
+      }
+      if (req.method === 'POST' && ['/api/connection/select', '/api/connection/recover', '/api/connection/connect'].includes(url.pathname)) {
+        const body = await readBody(req);
+        return json(res, 200, await oneAtATime(async () => {
+          if (opts.mock) throw Object.assign(new Error('Simulated mode cannot connect to or select physical devices. Start Vortex without --mock for hardware.'), { httpStatus: 409 });
+          const old = currentSerial();
+          if (old) vortex.leases.assertFree(old);
+          if (url.pathname === '/api/connection/connect') {
+            if (typeof body.endpoint === 'string') vortex.leases.assertFree(body.endpoint.trim());
+            const connected = await connectionDevices.connect(body.endpoint);
+            return { ...(await connectionStatus()), connected: connected.serial };
+          }
+          const serial = url.pathname.endsWith('/recover') ? old : body.serial;
+          try { assertConnectionSerial(serial); } catch { throw Object.assign(new Error('Select a valid device serial first.'), { httpStatus: 400 }); }
+          if (body.mobilecliDevice !== undefined && (typeof body.mobilecliDevice !== 'string' || !/^[A-Za-z0-9._:-]{0,128}$/.test(body.mobilecliDevice))) throw Object.assign(new Error('Invalid Mobilecli alias.'), { httpStatus: 400 });
+          vortex.leases.assertFree(serial);
+          // Even a failed recovery must discard old hit targets, without repeating any device action.
+          invalidateConnectionScreen();
+          const found = (await connectionDevices.list()).find(d => d.serial === serial);
+          if (!found || found.state !== 'device') throw Object.assign(new Error(connectionHint(found?.state || 'missing')), { httpStatus: 409 });
+          // Discovery awaits ADB; a test may have acquired either device while it was running.
+          if (old) vortex.leases.assertFree(old);
+          vortex.leases.assertFree(serial);
+          opts.serial = serial;
+          if (body.mobilecliDevice !== undefined) opts.mobilecliDevice = body.mobilecliDevice;
+          else if (old !== serial) opts.mobilecliDevice = '';
+          device = undefined;
+          return { ...(await connectionStatus()), refreshRequired: true };
+        }));
+      }
+      return json(res, 404, { error: 'Unknown device connection operation.' });
+    }
     if (vortex) {
       if (await vortex.handle(req, res, url, json, readBody, recorderContext)) return;
     } else if (/^\/api\/(automation|devices|tests|runs|reports|bench|project|mobilewright|visual)\b/.test(url.pathname)) {
@@ -349,6 +446,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': MIME['.html'] });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', 'index.html')));
+    }
+    if (req.method === 'GET' && url.pathname === '/webview-panel.js') {
+      res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-store' });
+      return res.end(fs.readFileSync(path.join(ROOT, 'public', 'webview-panel.js')));
     }
     if (req.method === 'GET' && url.pathname === '/input-controls.js') {
       res.writeHead(200,{'Content-Type':MIME['.js'],'Cache-Control':'no-store'});
@@ -372,7 +473,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ...r, mock: opts.mock });
     }
     if (req.method === 'GET' && url.pathname === '/api/config') {
-      return json(res, 200, { version:VERSION, features:{quickType:true,adbShortcuts:true,fastPreview:true}, pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
+      return json(res, 200, { version:VERSION, features:{quickType:true,adbShortcuts:true,fastPreview:true,deviceConnection:true,webviewDom:true}, pkg: opts.pkg, mock: opts.mock, outDir: opts.outDir, treeSource: opts.treeSource, engine: 'mobilewright', services: vortex ? 'available' : vortexUnavailable });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       const b = await readBody(req);
@@ -467,6 +568,7 @@ async function shutdown(sig) {
   shuttingDown = true;
   log(`${sig} received, shutting down`);
   try {
+    if (mockWebHost) await mockWebHost.close();
     const r = vortex && (await vortex.shutdown());
     if (r) for (const st of r.steps) log('[server]', `${st.ok ? 'ok ' : 'FAIL'} ${st.step}: ${st.detail}`);
   } catch (e) {

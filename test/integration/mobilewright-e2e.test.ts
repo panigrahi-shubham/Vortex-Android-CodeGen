@@ -8,7 +8,7 @@
  * Guards: generated TypeScript that does not compile against the real types, code the real runner cannot load
  *         or execute, wrong pass/fail classification, failures attributed to the wrong step, secrets required
  *         but not reported, cancel leaving processes or the device locked, Both mode running a flow twice
- * Run: VORTEX_MOBILEWRIGHT_DIR=/path/to/project-with-@mobilewright/test@0.0.66 npm run test:integration
+ * Run: VORTEX_MOBILEWRIGHT_DIR=/path/to/project-with-@mobilewright/test@0.0.69 npm run test:integration
  * Needs: a folder whose node_modules has @mobilewright/test (skipped otherwise, NOT passed)
  */
 import assert from 'node:assert/strict';
