@@ -12,6 +12,7 @@ import { DeviceBusyError, DeviceLeases } from '../devices/device-lease.ts';
 import { createDeviceManager, defaultAdb, type AdbDevice, type DeviceDetails } from '../devices/device-manager.ts';
 import { decodePng } from '../visual/png.ts';
 import { findTemplate, screenChange } from '../visual/match.ts';
+import { findVisualTarget, validVisualTarget, type VisualTarget } from '../visual/replay.ts';
 import { refineSuggestions } from '../model/assertions.ts';
 import { journalPending, journalEnd, recorderStillAlive } from '../engines/run-journal.ts';
 import { RunIndex } from '../engines/run-index.ts';
@@ -410,7 +411,14 @@ export async function createVortex(o: VortexOptions) {
         if (!m) throw Object.assign(new Error('template must be a PNG data URL'), { code: 'BAD_TEMPLATE', httpStatus: 400 });
         const roi = body.roi && typeof body.roi === 'object' ? (body.roi as { x: number; y: number; w: number; h: number }) : null;
         const minConfidence = Number(body.minConfidence) > 0 && Number(body.minConfidence) <= 1 ? Number(body.minConfidence) : 0.9;
-        out = findTemplate(decodePng(shot), decodePng(Buffer.from(m[1], 'base64')), { roi, minConfidence });
+        const template = Buffer.from(m[1], 'base64');
+        if (body.visualTarget !== undefined) {
+          const target = body.visualTarget as VisualTarget;
+          if (!validVisualTarget(target)) throw new ProjectError('BAD_TEMPLATE', 400, 'Invalid visual tap geometry.');
+          out = findVisualTarget(shot, template, target);
+        } else {
+          out = findTemplate(decodePng(shot), decodePng(template), { roi, minConfidence });
+        }
       }
       else if (!POST && p === '/api/tests') out = { outDir: ctx.outDir(), tests: listTests(ctx.outDir()) };
       // ---- project: shared model, MobileWright Plain/POM/Both ----
@@ -432,6 +440,11 @@ export async function createVortex(o: VortexOptions) {
             const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(a.dataUrl ?? ''));
             return m ? [{ name: path.basename(String(a.name)), data: Buffer.from(m[1], 'base64') }] : [];
           });
+        for (const event of inp.recording.events) {
+          if (event.visualTarget && !assets.some(asset => asset.name === path.basename(event.templateRef!) && asset.data.length > 24)) {
+            throw new ProjectError('MISSING_TEMPLATE', 400, `Step ${event.seq}: visual tap crop is missing. Record it again before saving.`);
+          }
+        }
         const r = saveCase(ctx.outDir(), inp.ref, {
           recording: inp.recording, files: b.files, assets, mode: inp.mode, target: inp.mode === 'both' ? inp.target : null, frameworks: inp.frameworks,
           replace: Array.isArray(body.replace) ? (body.replace as unknown[]).map(String) : [], generator,

@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.0-beta.2 — 2026-11-24
+
+- Record and replay local screenshot targets in Plain and POM when a WebView exposes only a container.
+- Require a unique visual match in consecutive frames before tapping. Ambiguous or moving targets stop the step.
+- Find icon-only labeled DOM controls and scope repeated actions to unique product or item keys when available.
+- Add a handoff from the WebView inspector to visual tap mode and use the replay matcher in the visual preview.
+
 ## 5.0.0-beta.1 — 2026-11-16
 
 Local beta build focused on live WebView recording. Hardware and Windows execution acceptance remain pending.

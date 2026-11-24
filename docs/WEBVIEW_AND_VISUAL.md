@@ -18,13 +18,15 @@ Input values are not collected. Typing defaults to an environment-variable refer
 
 When several inspectable pages exist, the user selects one. Replay steps require native WebView count/bounds/order to agree with MobileWright's mapping; otherwise the panel permits inspection/copying and explains why recording is disabled. Plain/POM exports verify page protocol, origin and path before DOM actions. They reattach when recorded page identity changes. Existing recordings remain schema version 1 and do not need a migration.
 
-An empty discovery result means no inspectable page was exposed; it does not prove the app has no WebView. Check the foreground page and app's debugging availability. If a production WebView cannot expose DOM, use the native text/IDs actually supplied or an explicit coordinate action. A debuggable APK label alone does not prove DOM access. Known Mobilecli failures, missing installations and owner conflicts produce actionable errors; Vortex does not silently fall back to competing instrumentation.
+An empty discovery result means no inspectable page was exposed. Check the foreground page and the app's WebView debugging configuration. For a release WebView, use any exposed native text or IDs, then try Visual match for controls visible only in the screenshot. Fixed coordinates remain available as an explicit option. [Android WebView debugging](https://developer.android.com/develop/ui/views/layout/webapps/debug-chrome-devtools)
 
 The mock Market Insights screen hosts the synthetic sample in real Chromium for DOM inspection and MobileWright replay tests. Native → WebView → Native and Plain/POM coverage use simulated devices; this is separate from physical-device validation.
 
 ## Visual tools
 
-Coordinate steps can retain a cropped template and relative screen position. The visual API performs local PNG/template matching with confidence and optional region-of-interest information. Ambiguous, absent or weak matches must be reviewed. A crop is not automatically a semantic locator. PNG decoding and screenshot comparison support visual evidence and screen-change suggestions.
+Visual taps save the tap position within the crop and match against a bounded area of the current screenshot. Replay compares the shape and color, rejects competing matches, and requires two consecutive locations to agree before sending one tap. **Find on screen** reports a match on the current capture. A strong match can still resemble the wrong control, so check the outcome on the next screen. Coordinate-only steps retain their separate fixed-point behavior.
+
+Midscene demonstrates screenshot-based targeting for controls that have no selectors. Playwright's uniqueness and actionability checks inform the rule to verify a target before dispatch. Maestro provides a useful reference for explicit point taps and bounded settling. For a future vision-model trial, start with one icon-only control and compare correct-target rate, elapsed time and false clicks against the local matcher on two device sizes. [Midscene agent APIs](https://www.midscenejs.com/reference/) · [Playwright actionability](https://playwright.dev/docs/actionability) · [Maestro tapOn](https://docs.maestro.dev/reference/commands-available/tapon)
 
 ## StockPilot check, 2026-11-02
 

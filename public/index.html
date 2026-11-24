@@ -174,6 +174,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
       <select id="tapStyle">
         <option value="both">Name, with coordinate fallback</option>
         <option value="name" selected>Name only (recommended)</option>
+        <option value="visual">Visual match</option>
         <option value="coord">Coordinate only</option>
       </select>
     </label></details>
@@ -214,7 +215,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
         <option value="mobilewright">MobileWright (TypeScript)</option>
         <option value="legacy">MobileWright, single .spec.ts (v0.1 format)</option>
       </select></label>
-      <label id="modeWrap" title="Plain: one standalone test file. POM: page objects, fixtures, data and a short test. Both: both from the same recording.">Mode <select id="mode">
+      <label id="modeWrap" title="Plain: one test file with support files when needed. POM: page objects, fixtures, data and a short test. Both: both from the same recording.">Mode <select id="mode">
         <option value="plain">Plain</option>
         <option value="pom">POM</option>
         <option value="both">Both</option>
@@ -285,7 +286,7 @@ a{color:var(--acc,#7aa7ff)}a:visited{color:var(--acc,#7aa7ff)}
   <div class="dlg">
     <div class="dlg-hd"><h2 id="wvTitle">WebView DOM inspector</h2><button id="wvFind">Find pages / refresh</button><button data-close>Close</button></div>
     <p>Inspect DOM elements, add replay steps, or explicitly choose Run & record for live actions. Native controls remain in the main inspector.</p>
-    <div class="row"><label>Page <select id="wvPages" style="max-width:650px"><option value="">Choose an inspectable page</option></select></label><button id="wvInspect" disabled>Inspect page</button></div>
+    <div class="row"><label>Page <select id="wvPages" style="max-width:650px"><option value="">Choose an inspectable page</option></select></label><button id="wvInspect" disabled>Inspect page</button><button id="wvVisual">Use visual taps</button></div>
     <p id="wvStatus" class="note" role="status" aria-live="polite">Find pages to begin.</p>
     <p id="wvLimitations" class="mut">DOM bounds use CSS pixels; they are not Android screenshot coordinates.</p>
     <div class="row"><label>Search DOM <input id="wvSearch" placeholder="Text, label, DOM id or CSS"></label><span id="wvCount" class="mut"></span></div>
@@ -492,7 +493,7 @@ function render() {
   const wv = S.nodes.filter((n) => /WebView/.test(n.type)).length;
   $('#wvBadge').textContent = wv ? 'WebView on screen (' + wv + ')' : '';
   $('#wvBadge').style.display = wv ? '' : 'none';
-  $('#webStatus').textContent = S.previewOnly ? 'Screenshot preview only. Refresh screen to inspect current controls.' : S.stale ? 'Screen capture failed. Refresh before recording.' : wv ? 'WebView: inspect native accessibility below, or open WebView DOM for inspectable page content.' : 'Text / ID / accessibility locators from the captured screen';
+  $('#webStatus').textContent = S.previewOnly ? 'Screenshot preview only. Refresh screen to inspect current controls.' : S.stale ? 'Screen capture failed. Refresh before recording.' : wv ? 'WebView: use DOM or exposed controls when available. Pick Visual match for controls shown only in the screenshot.' : 'Text / ID / accessibility locators from the captured screen';
   if (S.pkgChangedFrom) toast('Package changed from ' + S.pkgChangedFrom + ' to ' + S.pkg + ' (the app that is on screen).');
   if (document.activeElement !== $('#pkg')) $('#pkg').value = S.pkg;
   if (!S.appVisible && !S.previewOnly) toast('The app "' + S.pkg + '" is not on screen. Open it on the phone, or fix the Package field, then Refresh.', true);
@@ -578,7 +579,7 @@ function selectInspection(n, point) {
   $('#inspectDetail').innerHTML = `<dl class="kv">${rows.map(([k,v]) => `<dt>${esc(k)}</dt><dd style="overflow-wrap:anywhere">${esc(v)}</dd>`).join('')}</dl>` +
     `<div class="row"><button data-ins-copy="point">Copy pixels</button><button data-ins-copy="percent">Copy %</button>${n?.text ? '<button data-ins-copy="text">Copy text</button>' : ''}${n?.identifier?'<button data-ins-copy="id">Copy ID</button>':''}${n?'<button data-ins-copy="class">Copy class</button><button data-ins-copy="details">Copy details</button>':''}<button data-ins-copy="adb">Copy ADB tap</button><button data-ins-copy="tap">Copy tap step</button></div>` +
     (options ? `<label class="row">Locator <select id="inspectChoice" style="max-width:100%">${options}</select></label><code id="inspectExpr" style="display:block;overflow-wrap:anywhere"></code><div class="row"><button data-ins-action="test">Highlight matches</button><button data-ins-copy="locator">Copy locator</button><button data-ins-action="use">Use for recording</button></div><p id="inspectMatch" class="mut"></p>` : '<p class="warn">No semantic locator is exposed for this target. Coordinate taps depend on the screen layout.</p>') +
-    `<div class="row"><button data-ins-action="tap" ${n?.target?.expr&&n.visible!==false ? '' : 'disabled'}>Record tap</button><button data-ins-action="type" ${n&&n.visible!==false&&findInput(n)?.target?.expr ? '' : 'disabled'}>Record type</button><button data-ins-action="point">Record coordinate tap</button><button data-ins-action="assert" ${n?.target?.expr ? '' : 'disabled'}>Add assertion</button></div>` +
+    `<div class="row"><button data-ins-action="tap" ${n?.target?.expr&&n.visible!==false ? '' : 'disabled'}>Record tap</button><button data-ins-action="type" ${n&&n.visible!==false&&findInput(n)?.target?.expr ? '' : 'disabled'}>Record type</button><button data-ins-action="visual">Record visual tap</button><button data-ins-action="point">Record coordinate tap</button><button data-ins-action="assert" ${n?.target?.expr ? '' : 'disabled'}>Add assertion</button></div>` +
     '<small class="mut">WebView text is available only when the app exposes it. Match counts describe this captured tree, not a live replay check.</small>';
   if (options) { $('#inspectExpr').textContent = INSPECT.choices[0].expr; $('#inspectChoice').onchange = () => { INSPECT.choice = Number($('#inspectChoice').value); $('#inspectExpr').textContent = INSPECT.choices[INSPECT.choice].expr; $('#inspectMatch').textContent = ''; }; }
   const overlaps=hitCandidates(S.nodes,at.x,at.y);
@@ -610,6 +611,35 @@ async function recordCoordinate(point) {
   step.asset = await cropAsset(point);
   return perform({kind:'tap', x:point.x, y:point.y}, step);
 }
+function recordVisualTap(point) {
+  if (!S || busy || screenStale || S.previewOnly) return;
+  if ($('#fw').value === 'legacy') return toast('Choose MobileWright project output to record a visual tap.', true);
+  const img = $('#shot');
+  if (!img.complete || !img.naturalWidth || img.getAttribute('src') !== S.img) {
+    return toast('Let the latest screenshot finish loading, then select the target again.', true);
+  }
+  const {width, height} = S;
+  point = { x: Math.max(0, Math.min(width - 1, point.x)), y: Math.max(0, Math.min(height - 1, point.y)) };
+  const side = Math.min(width, height, 160, Math.max(64, Math.round(Math.min(width, height) * 0.12)));
+  const x = Math.max(0, Math.min(width - side, point.x - Math.floor(side / 2)));
+  const y = Math.max(0, Math.min(height - side, point.y - Math.floor(side / 2)));
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = side;
+  const kx = img.naturalWidth / width, ky = img.naturalHeight / height;
+  const asset = 'visual-' + crypto.randomUUID() + '.png';
+  try {
+    canvas.getContext('2d').drawImage(img, x*kx, y*ky, side*kx, side*ky, 0, 0, side, side);
+    assets.push({name:asset, dataUrl:canvas.toDataURL('image/png')});
+  } catch {
+    return toast('Could not capture the visual target. Refresh and select it again.', true);
+  }
+  const visualTarget = {width, height, x:point.x, y:point.y, offsetX:(point.x-x)/side, offsetY:(point.y-y)/side};
+  return perform({kind:'tap', x:point.x, y:point.y}, {
+    type:'tap', title:'Visual target ' + pointText(point), x:point.x, y:point.y, mode:'coord', pre:false,
+    target:{kind:'coordinate', expr:null, quality:50, warnings:['Replay requires a unique screenshot match that stays in place.']},
+    asset, visualTarget,
+  });
+}
 $('#inspectSearch').addEventListener('input', renderInspectorList);
 $('#inspectList').addEventListener('click', (event) => { const b=event.target.closest('[data-inspect-node]'); if (!b || busy) return; const n=S?.nodes.find(n => String(n.id) === b.dataset.inspectNode); if (n) {setMode('inspect'); selectInspection(n,center(n));} });
 $('#inspectDetail').addEventListener('click', async (event) => {
@@ -632,6 +662,7 @@ $('#inspectDetail').addEventListener('click', async (event) => {
     n.target={...choice}; showInfo(n); toast('Locator chosen for subsequent actions on this captured control.'); return;
   }
   if (action==='point') return recordCoordinate(INSPECT.point);
+  if (action==='visual') return recordVisualTap(INSPECT.point);
   if (action==='tap' && n) {
     const p=INSPECT.point;
     return perform({kind:'tap',x:p.x,y:p.y}, {type:'tap',title:titleOf(n),target:n.target,x:p.x,y:p.y,pre:true,mode:'name'});
@@ -727,20 +758,23 @@ async function onClick(pt, ev, nativeOnly = false) {
   // Explicit coordinates must bypass app nodes behind keyboards/overlays,
   // including ambiguous or missing accessibility controls at the chosen point.
   if (mode === 'tap' && $('#tapStyle').value === 'coord') return recordCoordinate(pt);
+  if (mode === 'tap' && $('#tapStyle').value === 'visual') return recordVisualTap(pt);
+  const overWebview = S.nodes.some(w => /WebView$/.test(w.type) && pt.x >= w.rect.x && pt.x < w.rect.x + w.rect.w && pt.y >= w.rect.y && pt.y < w.rect.y + w.rect.h);
+  const opaqueWeb = overWebview && (!n || (!n.text && !n.label && (/WebView|Layout|ViewGroup/.test(n.type) || !n.target.parts || n.target.viaAncestor)));
+  if (mode === 'tap' && opaqueWeb && $('#fw').value !== 'legacy') return recordVisualTap(pt);
   if(ambiguousHit(S.nodes,hitCandidates(S.nodes,pt.x,pt.y))){setMode('inspect');selectInspection(n,pt);return toast('Overlapping controls: choose the intended target in the inspector before recording.',true);}
   if (!n) {
     return toast('No exposed element here. Use Inspect to select this screen point.');
   }
   if (['tap', 'longpress', 'doubletap'].includes(mode)) {
-    const opaqueWeb = S.nodes.some(w => /WebView$/.test(w.type) && pt.x >= w.rect.x && pt.x < w.rect.x + w.rect.w && pt.y >= w.rect.y && pt.y < w.rect.y + w.rect.h) && !n.text && !n.label && /WebView|Layout|ViewGroup/.test(n.type);
     const t = opaqueWeb || $('#tapStyle').value === 'coord' ? { kind: 'coordinate', expr: null, quality: 10, warnings: ['Uses the recorded screen position; layout changes can move this target.'] } : n.target;
-    const step = { type: mode, title: opaqueWeb ? 'WebView position' : titleOf(n), target: t, x: pt.x, y: pt.y, pre: t.kind !== 'coordinate', mode: t.kind === 'coordinate' ? 'coord' : $('#tapStyle').value };
+    const step = { type: mode, title: opaqueWeb ? 'WebView position' : titleOf(n), target: t, x: pt.x, y: pt.y, pre: t.kind !== 'coordinate', mode: t.kind === 'coordinate' ? 'coord' : $('#tapStyle').value === 'visual' ? 'name' : $('#tapStyle').value };
     if (t.kind === 'coordinate') step.asset = await cropAsset(pt);
     return perform({ kind: mode, x: pt.x, y: pt.y }, step);
   }
   if (mode === 'type') {
     const input = findInput(n);
-    if (!input || input.target.kind === 'coordinate' || !input.target.parts || input.target.viaAncestor) return toast('No editable locator is exposed here. Tap the input, Refresh, then try Type. If the WebView exposes no editable field, typing cannot be recorded with a semantic locator.', true);
+    if (!input || input.target.kind === 'coordinate' || !input.target.parts || input.target.viaAncestor) return toast('No editable locator is exposed. Use a visual tap to focus the field, then use Quick type.', true);
     const fieldName = titleOf(input || n);
     const looksSecret = SENSITIVE.test([fieldName, (input || n).identifier, (input || n).label].join(' '));
     const inputScreenId = S.screenId;
@@ -849,7 +883,7 @@ function renderSteps() {
   autosave(false);
   $('#steps').innerHTML = steps.map((st, i) => {
     const T = st.target;
-    const kind = T ? `<span class="badge ${T.quality >= 85 ? 'good' : T.quality >= 55 ? 'warn' : 'bad'}">${T.kind}</span>` : '';
+    const kind = T ? `<span class="badge ${T.quality >= 85 ? 'good' : st.visualTarget || T.quality >= 55 ? 'warn' : 'bad'}">${st.visualTarget ? 'visual' : T.kind}</span>` : '';
     let hd = st.type === 'swipe' ? 'Swipe ' + st.args.direction + ' (' + st.args.distance + ' px)' : st.type === 'press' ? 'Press ' + st.args.key : st.type === 'sleep' ? 'Wait ' + st.args.ms + ' ms' : stepSummary(st);
     if (st.type === 'assert') hd = 'Check "' + (st.title || '') + '": ' + st.args.assertion + (st.args.expected !== undefined ? ' ' + st.args.expected : '');
     if (['type','type_focused'].includes(st.type)) hd += st.secretEnv ? ': \u2022\u2022\u2022\u2022' : ': "' + (st.args.text ?? '') + '"';
@@ -868,7 +902,7 @@ function renderSteps() {
     const slow = st.settleMs > 2500 ? `<div class="warn">screen took ${(st.settleMs / 1000).toFixed(1)} s to settle</div>` : '';
     const still = st.noChange ? '<div class="warn">the screen did not change after this action: check that it reached the right element</div>' : '';
     const vis = st.asset && T && T.kind === 'coordinate' && !isWeb
-      ? `<div class="pre"><button data-vfind="${i}" title="Look for the recorded picture of this element on the current screen">Find on screen</button>${st.visual ? ` <span class="${st.visual.found ? 'ok' : 'warn'}">${esc(st.visual.text)}</span>${st.visual.found && (st.visual.x !== st.x || st.visual.y !== st.y) ? ` <button data-vuse="${i}">Use (${st.visual.x}, ${st.visual.y})</button>` : ''}` : ''}</div>` : '';
+      ? `<div class="pre"><button data-vfind="${i}" title="Look for the recorded picture of this element on the current screen">Find on screen</button>${st.visual ? ` <span class="${st.visual.found ? 'ok' : 'warn'}">${esc(st.visual.text)}</span>${!st.visualTarget && st.visual.found && (st.visual.x !== st.x || st.visual.y !== st.y) ? ` <button data-vuse="${i}">Use (${st.visual.x}, ${st.visual.y})</button>` : ''}` : ''}</div>` : '';
     const scr = st.screen || { name: 'App', activity: null };
     const page = `<div class="pg" title="${esc(scr.activity || 'activity unknown')}">Page <input data-page="${i}" value="${esc(scr.name)}">${st.screenAfter && st.screenAfter.name !== scr.name ? ' &rarr; ' + esc(st.screenAfter.name) : ''}</div>`;
     const sens = st.type === 'type_focused' || st.type === 'type' && T && T.kind !== 'coordinate'
@@ -924,7 +958,10 @@ $('#steps').addEventListener('click', async (e) => {
     const st = steps[+vf.dataset.vfind];
     const a = assets.find((x) => x.name === st.asset);
     if (!a) return toast('The picture for this step is not in this browser any more.', true);
-    const r = await call('/api/visual/find', { template: a.dataUrl });
+    if (!S || screenStale || S.previewOnly) return toast('Refresh the full screen before checking the match.', true);
+    const screenId = S.screenId;
+    const r = await call('/api/visual/find', { template: a.dataUrl, visualTarget: st.visualTarget });
+    if (screenStale || S?.screenId !== screenId || steps[+vf.dataset.vfind] !== st) return;
     if (!r.ok) return toast(r.data.error || 'Visual search failed', true);
     const m = r.data;
     st.visual = { found: m.found, x: m.center ? m.center.x : null, y: m.center ? m.center.y : null, text: m.found ? `found ${(m.confidence * 100).toFixed(1)}% at (${m.center.x}, ${m.center.y}), scale ${m.scale}, ${m.timeMs} ms` : `not used: ${m.reason}` };
@@ -1234,6 +1271,7 @@ setupWebviewPanel({
   call,
   onScreen(screen) { S = screen; screenStale = false; render(); },
   onStep(step) { if (step.id && steps.some(s => s.id === step.id)) return; addStep(step); toast('Added WebView replay step.'); },
+  onVisualMode() { $('#tapStyle').value = 'visual'; setMode('tap'); toast('Click the visible control to record a visual tap.'); },
   onInvalidate: discardDeviceTargets,
   context() { return { appPackage: $('#pkg').value || S?.pkg, serial: S?.device || null }; },
 });

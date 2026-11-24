@@ -1,10 +1,10 @@
 # Vortex Android Recorder
 
-**V5.0.0-beta.1 · MobileWright 0.0.69**
+**V5.0.0-beta.2 · MobileWright 0.0.69**
 
 Inspect Android screens, record actions, and generate TypeScript tests in Plain or Page Object Model (POM) format. V5 adds **live WebView recording**: select a DOM element, choose **Run & record**, and execute a tap, input replacement, or clear while adding the completed step to your recording.
 
-V5 source is available on [`v5-live-webview-recording`](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/tree/v5-live-webview-recording). This beta has been validated with simulated devices on Linux; physical-device and native Windows acceptance remain pending. See the [V5 release notes](docs/V5_RELEASE.md) and [changelog](CHANGELOG.md).
+V5 records live WebView actions on inspectable pages and can replay visual taps when Android exposes no usable locator. See the [V5 release notes](docs/V5_RELEASE.md) and [changelog](CHANGELOG.md).
 
 ## What you can do
 
@@ -31,7 +31,7 @@ Replay uses the installed runner; Vortex does not download one on demand. Real W
 ## Get the V5 source
 
 ```bash
-git clone --branch v5-live-webview-recording --single-branch https://github.com/panigrahi-shubham/Vortex-Android-CodeGen.git
+git clone https://github.com/panigrahi-shubham/Vortex-Android-CodeGen.git
 cd Vortex-Android-CodeGen
 npm ci
 ```
@@ -136,7 +136,7 @@ If the action completed but screen capture failed, keep the recorded step and in
 - Plain/POM exports guard the recorded page protocol, origin and path. Legacy export refuses DOM steps.
 - No remote phone tunnel is created. A USB phone attached to another computer is not automatically visible to this host.
 
-When no inspectable page is exposed, use the native controls actually available or an explicit coordinate action. See [WebView details](docs/WEBVIEW_AND_VISUAL.md).
+When no inspectable page is exposed, start with native text or IDs. For controls visible only in the screenshot, choose **Use visual taps**, click the control, then add a check for the expected result. See [WebView details](docs/WEBVIEW_AND_VISUAL.md).
 
 ## Devices, typing and ADB shortcuts
 
@@ -241,8 +241,8 @@ npm run package:windows
 Output:
 
 ```text
-dist/vortex-android-recorder-5.0.0-beta.1-windows.zip
-dist/vortex-android-recorder-5.0.0-beta.1-windows.zip.sha256
+dist/vortex-android-recorder-5.0.0-beta.2-windows.zip
+dist/vortex-android-recorder-5.0.0-beta.2-windows.zip.sha256
 ```
 
 The ZIP includes the recorder, launchers, documentation and synthetic samples. Install Node.js, ADB and the replay runner separately. Building a ZIP or pushing this branch does not publish a GitHub release. The [published V2 archive](https://github.com/panigrahi-shubham/Vortex-Android-CodeGen/releases/tag/v2.0.0-beta.1) contains the earlier feature set.

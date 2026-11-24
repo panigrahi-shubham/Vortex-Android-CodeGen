@@ -13,7 +13,7 @@ export const SAMPLES = path.join(path.dirname(fileURLToPath(import.meta.url)), '
 export const HOME = { name: 'Home', activity: `${PKG}/.ui.HomeActivity` };
 export const PRODUCTS = { name: 'My Products', activity: `${PKG}/.ui.products.MyProductsActivity` };
 
-type N = { id: number; identifier: string; text: string; label: string; target: UiStep['target'] };
+type N = { id: number; identifier: string; text: string; label: string; rect: { x: number; y: number; w: number; h: number }; target: UiStep['target'] };
 export const load = (f: string) => {
   const n = appNodes(parseTree(fs.readFileSync(path.join(SAMPLES, f))), PKG) as unknown as N[];
   annotate(n as never, PKG);

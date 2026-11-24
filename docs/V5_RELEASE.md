@@ -1,6 +1,17 @@
-# Vortex 5.0.0-beta.1
+# Vortex 5.0.0 beta
 
-V5 adds live WebView recording to V4's DOM inspector. It uses MobileWright 0.0.69 and keeps recording schema version 1. This is a local beta build, with no automatic GitHub publication.
+V5 adds live WebView recording to the DOM inspector and visual replay for opaque controls. It uses MobileWright 0.0.69 and keeps recording schema version 1.
+
+## When the page exposes no locator
+
+1. Open the page on the device and refresh Vortex. Use **WebView DOM** or the native inspector when the app exposes a unique control.
+2. For an icon or control visible only in the screenshot, choose **Use visual taps** from WebView DOM, **Visual match** from Tap options, or **Record visual tap** after selecting a point in Inspect mode. A normal tap inside a detected opaque WebView also uses visual replay.
+3. Click the visible control. The recorder saves a small crop from before the action. Use **Find on screen** to check the crop against a fresh capture of the same page. Confirm the expected result after the tap with a visible element, a state change, or a destination assertion.
+4. Save the project. Keep the generated test, visual support files and crop together when moving it. Plain and POM both use a local search around the recorded position. A strong, unique match must stay within two pixels across two fresh frames. Replay stops if it cannot confirm a match.
+
+Visual matching can tolerate small shifts and compatible scale changes. It can fail on major reflow, a changed theme or identical controls in the search area. Review sensitive app data in crops before sharing. For opaque inputs, use a visual tap to focus the field and **Quick type** for the focused input.
+
+For inspectable pages, V5 includes icon-only DOM attributes such as `aria-label` and chooses a unique keyed parent when the same label appears on multiple product cards. If no unique parent is available, the inspector marks the repeated label ambiguous. App teams can improve locator coverage by adding stable test IDs to controls and stable item IDs to repeated cards.
 
 ## Live recording workflow
 
@@ -32,4 +43,4 @@ Frames/shadow DOM, DOM-to-native screenshot overlays, live assertions and a remo
 
 Run `npm test`, `npm run typecheck`, and `npm run test:integration` with the supported runner and Chromium installed. V5 tests exercise native DOM setters/events, covered/stale/ambiguous targets, live type/clear/tap, double-click suppression, lost-response recovery, request deduplication, receipt privacy and Plain/POM replay. Unit tests also cover unknown outcomes, capture failure, interrupted receipts, journal write failures and owned transport lifecycle.
 
-Build `dist/vortex-android-recorder-5.0.0-beta.1-windows.zip` and its SHA-256 file with `npm run package:windows`. Linux simulation/packaging evidence does not establish physical-device or native Windows acceptance; those remain pending.
+Build `dist/vortex-android-recorder-5.0.0-beta.2-windows.zip` and its SHA-256 file with `npm run package:windows`. Run physical-device acceptance on the intended APK before relying on new visual steps for release sign-off.

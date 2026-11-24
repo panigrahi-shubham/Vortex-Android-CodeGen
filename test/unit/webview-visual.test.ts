@@ -19,6 +19,7 @@ import { generateMobilewrightPlain, generateMobilewrightPom, webViewExpr } from 
 import { fromUiSteps, toUiSteps, validateRecording } from '../../src/model/recording.ts';
 import { blit, crop, decodePng, encodePng, resize, type Image } from '../../src/visual/png.ts';
 import { findTemplate, screenChange } from '../../src/visual/match.ts';
+import { tapVisualTarget } from '../../src/visual/replay.ts';
 import { INSIGHTS, INSIGHTS_WEB, PKG, SAMPLES, webSampleRecording, webSampleSteps } from '../support/sample-flow.ts';
 
 const SIZE = { width: 1080, height: 2400 };
@@ -127,4 +128,26 @@ test('screen change: identical screens 0, a navigation clearly above the no-chan
   assert.ok(screenChange(home, img('products.png')) > 0.1);
   assert.ok(screenChange(home, img('insights.png')) > 0.1);
   assert.equal(screenChange(home, resize(home, 540, 1200)), 1, 'different sizes count as changed');
+});
+
+test('visual replay confirms a relocated tap twice and stops on duplicate or moving matches', async () => {
+  const patch = crop(img('home.png'), 764, 146, 80, 80);
+  const template = encodePng(patch);
+  const frame = (x: number, other?: number) => {
+    const image: Image = { width: 420, height: 420, data: new Uint8Array(420 * 420 * 4).fill(255) };
+    blit(image, patch, x, 150);
+    if (other !== undefined) blit(image, patch, other, 150);
+    return encodePng(image);
+  };
+  const target = { width: 420, height: 420, x: 160, y: 180, offsetX: 0.25, offsetY: 0.75 };
+  const relocated = frame(120);
+  const taps: number[][] = [];
+  let reads = 0;
+  const tap = async (x: number, y: number) => { taps.push([x, y]); };
+  await tapVisualTarget({ screenshot: async () => { reads++; return relocated; }, tap }, template, target);
+  assert.deepEqual(taps, [[140, 210]]);
+  assert.equal(reads, 2);
+  await assert.rejects(tapVisualTarget({ screenshot: async () => frame(76, 166), tap }, template, target), /ambiguous.*No tap was sent/);
+  await assert.rejects(tapVisualTarget({ screenshot: async () => frame(++reads % 2 ? 110 : 125), tap }, template, target), /no stable match.*No tap was sent/);
+  assert.deepEqual(taps, [[140, 210]]);
 });

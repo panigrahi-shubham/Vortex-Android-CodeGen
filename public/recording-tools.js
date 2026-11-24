@@ -52,6 +52,7 @@ export function editStep(list, index, patch) {
     const parts=validateParts(patch.parts);
     if (step.context!=='WEBVIEW'&&['css','xpath'].includes(parts.by)) throw Error('Native MobileWright locators use ID, label, text, type or scope.');
     step.target={...step.target,parts,expr:locatorExpression(parts),kind:parts.by==='id'?'testId':parts.index!==undefined?'nth':parts.by};
+    if (step.visualTarget) { delete step.visualTarget; delete step.asset; delete step.visual; step.target.warnings = []; }
     if(list[index].target?.kind==='coordinate'){step.mode='name';step.pre=true;}
   }
   return next;
@@ -83,8 +84,10 @@ export function reviewRecording(steps) {
     const coordinate=s.target?.kind==='coordinate'||s.mode==='coord';
     if(coordinate){
       const before=steps[i-1], after=steps[i+1];
-      if(!before||!['assert','wait_visible'].includes(before.type))issues.push({step:i+1,code:'COORDINATE_PRECHECK',message:'Add a relevant assertion before this coordinate action.'});
-      if(!(s.post?.length||(s.sugg||[]).some(x=>x.on)||after?.type==='assert'||after?.type==='wait_visible'))issues.push({step:i+1,code:'COORDINATE_RESULT',message:'Add a destination or result assertion after this coordinate action.'});
+      if(!s.visualTarget&&(!before||!['assert','wait_visible'].includes(before.type)))issues.push({step:i+1,code:'COORDINATE_PRECHECK',message:'Add a relevant assertion before this coordinate action.'});
+      if(!(s.post?.length||(s.sugg||[]).some(x=>x.on)||after?.type==='assert'||after?.type==='wait_visible')){
+        issues.push({step:i+1,code:s.visualTarget?'VISUAL_RESULT':'COORDINATE_RESULT',message:`Add a destination or result assertion after this ${s.visualTarget?'visual tap':'coordinate action'}.`});
+      }
     }
     if(s.target?.parts?.index!==undefined)issues.push({step:i+1,code:'POSITIONAL_LOCATOR',message:'This locator depends on row/field order. Prefer a product-specific scope when possible.'});
     if(s.mode==='both')issues.push({step:i+1,code:'COORDINATE_FALLBACK',message:'The coordinate fallback is used only when the locator is absent. A failed delivered tap is never repeated.'});

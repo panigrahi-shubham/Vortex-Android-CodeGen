@@ -25,6 +25,7 @@ import { buildCase, listProject, saveCase, type Mode } from '../../src/project/p
 import type { Recording } from '../../src/model/recording.ts';
 import type { Variant } from '../../src/model/output.ts';
 import { HOME, PKG, SAMPLES, sampleRecording, load, byId } from '../support/sample-flow.ts';
+import { crop, decodePng, encodePng } from '../../src/visual/png.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PROJECT = process.env.VORTEX_MOBILEWRIGHT_DIR ? path.resolve(process.env.VORTEX_MOBILEWRIGHT_DIR) : '';
@@ -51,11 +52,11 @@ after(() => {
   if (out) fs.rmSync(out, { recursive: true, force: true });
 });
 
-function save(rec: Recording, caseSlug: string, mode: Mode, target: Variant = 'pom', module = 'catalog') {
+function save(rec: Recording, caseSlug: string, mode: Mode, target: Variant = 'pom', module = 'catalog', assets: { name: string; data: Buffer }[] = []) {
   const ref = { module, case: caseSlug };
   const b = buildCase(rec, ref, { frameworks: ['mobilewright'], mode, target, size: SIZE });
   assert.deepEqual(b.issues, []);
-  saveCase(out, ref, { recording: rec, files: b.files, assets: [], mode, target: mode === 'both' ? target : null, frameworks: ['mobilewright'], generator: 'it' });
+  saveCase(out, ref, { recording: rec, files: b.files, assets, mode, target: mode === 'both' ? target : null, frameworks: ['mobilewright'], generator: 'it' });
   return Object.fromEntries(b.files.filter((f) => f.role === 'entry').map((f) => [f.variant, path.join(module, caseSlug, f.path)]));
 }
 
@@ -63,6 +64,31 @@ async function run(files: string[], timeoutMs = 120_000) {
   const { id } = await runner.start({ testsDir: out, files, serial: 'mock-device', timeoutMs });
   return { id, result: await runner.wait(id) };
 }
+
+test('saved visual taps replay from their crop in Plain and POM and check the resulting page', { skip }, async () => {
+  const { rect } = byId(load('home.json'), 'home_my_products_button');
+  const x = Math.round(rect.x + rect.w / 2), y = Math.round(rect.y + rect.h / 2);
+  const asset = 'products-target.png';
+  const home = decodePng(fs.readFileSync(path.join(SAMPLES, 'home.png')));
+  const data = encodePng(crop(home, x - 60, y - 60, 120, 120));
+  const proof = sampleRecording().events.find(event => event.screen.name !== HOME.name && event.target?.parts);
+  assert.ok(proof?.target?.parts);
+  const recording = fromUiSteps([
+    { type: 'tap', title: 'Visual Products', x, y, mode: 'coord', target: { kind: 'coordinate' },
+      asset, visualTarget: { ...SIZE, x, y, offsetX: 0.5, offsetY: 0.5 } },
+    { type: 'assert', title: 'Product screen', target: { kind: proof.target.kind, parts: proof.target.parts },
+      args: { assertion: 'visible' } },
+  ], { id: 'visual-e2e', name: 'Visual replay', module: 'catalog', appPackage: PKG, serial: 'mock-device', screen: SIZE, version: 'test' });
+  const entries = save(recording, 'visual', 'both', 'pom', 'catalog', [{ name: asset, data }]);
+  for (const file of [entries.plain, entries.pom]) {
+    fs.writeFileSync(driverLog, '');
+    const { id, result } = await run([file]);
+    assert.equal(result.status, 'passed', result.summary + '\n' + runner.get(id).output.slice(-3000));
+    const taps = fs.readFileSync(driverLog, 'utf8').trim().split('\n').map(line => JSON.parse(line)).filter(op => op.op === 'tap');
+    assert.equal(taps.length, 1);
+    assert.match(taps[0].id, /home_my_products_button$/);
+  }
+});
 
 // Risk: generated code compiles in our heads but not against MobileWright's real type definitions.
 // Given Plain and POM output (with a sensitive input), When type-checked under strict settings against @mobilewright/test, Then there are no errors.

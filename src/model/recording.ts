@@ -7,6 +7,8 @@
 // Versioning: `migrateRecording` accepts every older shape and returns the current version. Older files are
 // never rewritten in place; saving keeps the previous file in recording.history/.
 
+import { validVisualTarget, type VisualTarget } from '../visual/replay.ts';
+
 export const RECORDING_SCHEMA = 'vortex.recording';
 export const RECORDING_VERSION = 1;
 
@@ -126,6 +128,7 @@ export interface RecordedEvent {
   suggestions: Assertion[];
   observations: { settleMs: number | null };
   templateRef: string | null;
+  visualTarget?: VisualTarget;
   comment: string | null;
   fallback: { strategy: 'coordinate' | 'none'; screen: { width: number; height: number } | null };
   error: string | null;
@@ -179,6 +182,7 @@ export interface UiStep {
   post?: { assertion: string; expected?: string | number; parts?: LocatorParts; kind?: string; title?: string; reason?: string }[];
   settleMs?: number;
   asset?: string;
+  visualTarget?: VisualTarget;
   screen?: Screen;
   screenAfter?: Screen | null;
   secretEnv?: string;
@@ -221,6 +225,11 @@ export function fromUiSteps(steps: UiStep[], meta: RecordingMeta): Recording {
     const accepted = st.post ?? (st.sugg ?? []).filter((s) => s.on);
     const rejected = (st.sugg ?? []).filter((s) => !s.on);
     const screen = st.screen ?? { name: 'App', activity: null };
+    if (st.visualTarget !== undefined && (st.type !== 'tap' || st.context === 'WEBVIEW' ||
+        t?.kind !== 'coordinate' || !validVisualTarget(st.visualTarget) ||
+        !/^[A-Za-z0-9_-]{1,80}\.png$/.test(st.asset || ''))) {
+      throw new RecordingError(`step ${i + 1}: invalid visual tap or missing crop`);
+    }
     return {
       id: st.id ?? `e${i + 1}`,
       seq: i + 1,
@@ -269,8 +278,9 @@ export function fromUiSteps(steps: UiStep[], meta: RecordingMeta): Recording {
       suggestions: rejected.map((s) => toAssertion(s, 'suggested')),
       observations: { settleMs: Number.isFinite(st.settleMs) ? st.settleMs! : null },
       templateRef: st.asset ? `assets/templates/${st.asset}` : null,
+      ...(st.visualTarget ? { visualTarget: st.visualTarget } : {}),
       comment: st.comment ?? null,
-      fallback: { strategy: st.mode === 'name' ? 'none' : 'coordinate', screen: meta.screen },
+      fallback: { strategy: st.mode === 'name' || st.visualTarget ? 'none' : 'coordinate', screen: meta.screen },
       error: null,
     };
   });
@@ -330,6 +340,7 @@ export function toUiSteps(rec: Recording): UiStep[] {
       sugg,
       ...(e.observations.settleMs !== null ? { settleMs: e.observations.settleMs } : {}),
       ...(e.templateRef ? { asset: e.templateRef.split('/').pop() } : {}),
+      ...(e.visualTarget ? { visualTarget: e.visualTarget } : {}),
       screen: e.screen,
       screenAfter: e.screenAfter,
       ...(e.input?.secretEnv ? { secretEnv: e.input.secretEnv } : {}),
@@ -380,6 +391,11 @@ export function validateRecording(r: Recording): Recording {
     if (!e || !ACTION_TYPES.includes(e.action?.type)) problems.push(`events[${i}].action.type`);
     if (e?.input?.secretEnv && e.input.text !== undefined) problems.push(`events[${i}].input: a secret must not store its value`);
     if (e?.context === 'WEBVIEW' && !e.webview) problems.push(`events[${i}].webview: a WebView step needs its WebView`);
+    if (e?.visualTarget !== undefined && (e.action?.type !== 'tap' || e.context === 'WEBVIEW' ||
+        e.target?.kind !== 'coordinate' || !validVisualTarget(e.visualTarget) ||
+        !/^assets\/templates\/[A-Za-z0-9_-]{1,80}\.png$/.test(e.templateRef || ''))) {
+      problems.push(`events[${i}].visualTarget: invalid visual tap or missing crop`);
+    }
     if (e && !e.context) (e as RecordedEvent).context = 'NATIVE_APP'; // files written before Milestone 4
     if (e && e.webview === undefined) (e as RecordedEvent).webview = null;
   });

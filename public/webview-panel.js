@@ -1,5 +1,5 @@
 // WebView DOM remains a separate inspection surface: its CSS bounds are not screen pixels.
-export function setupWebviewPanel({ call, onScreen, onStep, onInvalidate = () => {}, context = () => ({}) }) {
+export function setupWebviewPanel({ call, onScreen, onStep, onVisualMode, onInvalidate = () => {}, context = () => ({}) }) {
   const $ = selector => document.querySelector(selector);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   let inspected = null, selected = null, pending = false;
@@ -22,6 +22,7 @@ export function setupWebviewPanel({ call, onScreen, onStep, onInvalidate = () =>
     $('#wvAcknowledgeAction').disabled = pending;
     $('#wvExecution').disabled = pending;
     $('#wvFind').disabled = pending;
+    $('#wvVisual').disabled = pending || !!pendingAction;
     $('#wvInspect').disabled = pending || !$('#wvPages').value;
     $('#wvCopy').disabled = pending || !selected;
   }
@@ -32,6 +33,11 @@ export function setupWebviewPanel({ call, onScreen, onStep, onInvalidate = () =>
   function renderNodes() {
     const query = $('#wvSearch').value.trim().toLowerCase();
     const nodes = (inspected?.dom.nodes || []).filter(n => [n.text,n.label,n.domId,n.tag,n.role,n.selector].some(v => String(v).toLowerCase().includes(query)));
+    if (query) {
+      const score = node => [node.text, node.label, node.domId].some(value => value.toLowerCase() === query) ? 2 :
+        /^(?:a|button|input|textarea|select)$/.test(node.tag) ? 1 : 0;
+      nodes.sort((a, b) => score(b) - score(a));
+    }
     $('#wvNodes').innerHTML = nodes.map(n => `<button type="button" data-wv-node="${esc(n.id)}" style="display:block;width:100%;text-align:left;margin:4px 0" aria-pressed="${n.id === selected?.id}"><b>${esc(n.tag)}</b> ${esc(n.label || n.text || n.domId || '(empty)')}<br><small>${esc(n.selector)} · ${n.matches} match(es)</small></button>`).join('') || '<p>No visible top-level DOM elements match.</p>';
     $('#wvCount').textContent = `${nodes.length} of ${inspected?.dom.nodes.length || 0} elements`;
   }
@@ -62,6 +68,7 @@ export function setupWebviewPanel({ call, onScreen, onStep, onInvalidate = () =>
     status((response.data.simulated ? 'Simulated WebView. ' : '') + response.data.message);
   }
   $('#btnWebview').onclick = () => { $('#wvDlg').showModal(); request(find); };
+  $('#wvVisual').onclick = () => { $('#wvDlg').close(); onVisualMode(); };
   $('#wvFind').onclick = () => request(find);
   $('#wvPages').onchange = () => { clear(); status('Choose Inspect page to read this page’s DOM.'); controls(); };
   $('#wvInspect').onclick = () => request(async () => {

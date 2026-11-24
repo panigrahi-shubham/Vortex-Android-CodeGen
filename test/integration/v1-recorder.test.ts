@@ -22,7 +22,9 @@ test('v1 HTTP draft revisions, fast captures, stale screens and mixed-app batch 
     assert.equal(acted.status,200);assert.equal(acted.body.timings.policy,'fast');assert.equal(acted.body.timings.stable,false);
     assert.ok(acted.body.timings.totalMs>=acted.body.timings.actionMs);
     assert.equal((await srv.api('/api/action',{kind:'tap',x:20,y:20,screenId:screen.screenId})).status,409);
-    const focusedScreen=(await srv.api('/api/screen')).body;
+    const refreshed = await srv.api('/api/screen');
+    assert.equal(refreshed.status, 200, JSON.stringify(refreshed.body).slice(0, 500));
+    const focusedScreen=refreshed.body;
     assert.equal((await srv.api('/api/action',{kind:'type_focused',text:'1234'})).status,409);
     assert.equal((await srv.api('/api/action',{kind:'type_focused',text:'',screenId:focusedScreen.screenId})).status,400);
     const typed=await srv.api('/api/action',{kind:'type_focused',text:'1234',screenId:focusedScreen.screenId,capturePolicy:'fast'});
